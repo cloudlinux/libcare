@@ -1,0 +1,13 @@
+docker:
+  image: kernelcare/centos7
+  tag:   gcc-4.8.2-16.el7
+urls:
+  src: ftp://bo.mirror.garr.it/2/scientific/7x/SRPMS/vendor/glibc-2.17-55.el7.src.rpm
+  x86_64:
+    none:
+      bin: ftp://ftp.icm.edu.pl/vol/rzm5/linux-scientificlinux/7.0/x86_64/os/Packages/glibc-2.17-55.el7.x86_64.rpm
+      prebuilt: https://s3.amazonaws.com/kpatch/kernels/rhel7/glibc-2.17-55.el7/build.orig-glibc-2.17-55.el7.x86_64.rpm.tgz
+environment:
+  x86_64:
+    none:
+      PREBUILT_PATH: /kcdata/build.orig-glibc-2.17-55.el7.x86_64.rpm.tgz

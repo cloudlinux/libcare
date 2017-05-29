@@ -1,0 +1,9 @@
+--- ./libpatchlevel.c	2016-02-07 21:05:13.564346849 +0300
++++ ./libpatchlevel.c	2016-02-07 21:05:21.748640167 +0300
+@@ -3,5 +3,5 @@
+ static const char *msg = "Hello from %s shared library\n";
+ void print_greetings(void)
+ {
+-	printf(msg, "UNPATCHED");
++	printf(msg, "PATCHED");
+ }

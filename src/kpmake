@@ -1,0 +1,189 @@
+#!/bin/sh -e
+
+usage() {
+cat<<'EOF'
+Makes `kpatch'es for the makesystem in the current directory.
+
+Usage:	kpmake [-h|--help] [-u|--update || -c|--clean]
+	[-s|--srcdir=SRCDIR] \
+	[-d|--destdir=DESTDIRVAR] \
+	PATCH1 PATCH2 ...
+
+Run from inside the directory with `make'ble software. Makesystem must support
+install with specified DESTDIR.
+
+  -c --clean	do a clean build, execute `make clean` first
+  -u --update	only update existing patches without rebuild. useful when
+		working on patch utils.
+  -d --destdir	specify variable makefile system uses to specify destination
+		directory for the installation
+EOF
+		exit ${1-0}
+}
+
+
+prepare_env() {
+	KPATCH_PATH=$(dirname $0)
+
+	if test ! -x "$KPATCH_PATH/kpatch_gensrc"; then
+		echo "kpatch tools are missing" >&2
+		exit 1
+	fi
+
+	export IS_KPATCH_CC=y
+	export CC=$KPATCH_PATH/kpatch_cc
+	export CXX=$CC
+
+	MAKE_OUTPUT=/dev/stdout
+
+	KPMAKEFILE=""
+	test -f kpmakefile && KPMAKEFILE="-f kpmakefile"
+
+	KPMAKE_ORIGINAL_DIR="${KPMAKE_ORIGINAL_DIR-$PWD/kpmake}"
+	KPMAKE_PATCHED_DIR="${KPMAKE_PATCHED_DIR-$PWD/.kpmaketmp/patched}"
+	KPMAKE_PATCHROOT="${KPMAKE_PATCHROOT-$PWD/patchroot}"
+
+	export KPMAKE_ORIGINAL_DIR KPMAKE_PATCHED_DIR KPMAKE_PATCHROOT
+	mkdir -p "$KPMAKE_ORIGINAL_DIR" "$KPMAKE_PATCHED_DIR" "$KPMAKE_PATCHROOT"
+
+	unset MAKELEVEL
+	unset MAKEFLAGS
+
+	red=$(tput setaf 1)
+	green=$(tput setaf 2)
+	reset=$(tput sgr0)
+}
+
+restore_origs() {
+	find $srcdir -regex '.+\.[0-9]+\.kpmakeorig' | awk '
+	{
+		match($0, /(.*)\.[0-9]+\.kpmakeorig/, a);
+		fname = a[1];
+		if (!vers[fname] || vers[fname] > $0)
+			{ vers[fname] = $0; }
+	}
+	END { for (f in vers) system("mv " vers[f] " " f); }
+'
+}
+
+trap "restore_origs" 0
+
+build_objects() {
+	restore_origs
+
+	if test -n "$do_clean"; then
+		make $KPMAKEFILE clean >$MAKE_OUTPUT 2>&1
+		rm -rf "$KPMAKE_ORIGINAL_DIR" "$KPMAKE_PATCHED_DIR"
+	fi
+
+	export KPATCH_STAGE=original
+	export KPCC_DBGFILTER_ARGS=""
+
+	echo "${green}BUILDING ORIGINAL CODE${reset}"
+	make $KPMAKEFILE >$MAKE_OUTPUT 2>&1
+
+	echo "${green}INSTALLING ORIGINAL OBJECTS INTO $KPMAKE_ORIGINAL_DIR${reset}"
+	make $KPMAKEFILE install				\
+		"$destdir=$KPMAKE_ORIGINAL_DIR"			\
+		>$MAKE_OUTPUT 2>&1
+
+	local oldpwd="$(pwd)"
+	if test -n "$srcdir"; then
+		cd "$srcdir"
+	fi
+
+	i=0
+	for patch; do
+		echo "${red}applying $patch...${reset}"
+		patch -b -z .${i}.kpmakeorig -p1 < $patch
+	done
+
+	if test -n "$srcdir"; then
+		cd "$oldpwd"
+	fi
+
+	export KPATCH_STAGE=patched
+	export KPCC_APPEND_ARGS="-Wl,-q"
+
+	echo "${green}BUILDING PATCHED CODE${reset}"
+	make $KPMAKEFILE >$MAKE_OUTPUT 2>&1
+
+	echo "${green}INSTALLING PATCHED OBJECTS INTO $KPMAKE_PATCHED_DIR${reset}"
+	make $KPMAKEFILE install				\
+		"$destdir=$KPMAKE_PATCHED_DIR"			\
+		>$MAKE_OUTPUT 2>&1
+}
+
+build_kpatches() {
+	mkdir -p "${KPMAKE_PATCHROOT}"
+
+	echo "${green}MAKING PATCHES${reset}"
+
+	for execfile in $(find "$KPMAKE_ORIGINAL_DIR" -perm /0111 -type f); do
+		origexec="$execfile"
+		filename="${origexec##*$KPMAKE_ORIGINAL_DIR/}"
+		patchedexec="$KPMAKE_PATCHED_DIR/$filename"
+
+		buildid=$(eu-readelf -n "$origexec" | sed -n '/Build ID:/ { s/.* //; p }')
+		if ! eu-readelf -S "$patchedexec" | grep -q '.kpatch'; then
+			continue
+		fi
+
+		test -n "$buildid" || continue
+
+		chmod u+w "${origexec}" "${patchedexec}"
+		$KPATCH_PATH/kpatch_strip --strip "${patchedexec}" \
+			"${patchedexec}.stripped" >/dev/null
+		$KPATCH_PATH/kpatch_strip --rel-fixup "$origexec" \
+			"${patchedexec}.stripped" || continue
+		/usr/bin/strip --strip-unneeded "${patchedexec}.stripped"
+		$KPATCH_PATH/kpatch_strip --undo-link "$origexec" "${patchedexec}.stripped"
+		$KPATCH_PATH/kpatch_make -b "$buildid" \
+			"${patchedexec}.stripped" -o "${patchedexec}.kpatch"
+		cp "${patchedexec}.kpatch" "${KPMAKE_PATCHROOT}"/${buildid}.kpatch
+		echo "patch for ${origexec} is in ${KPMAKE_PATCHROOT}/${buildid}.kpatch"
+	done
+}
+
+main() {
+	PROG_NAME=$(basename $0)
+
+	TEMP=$(getopt -o s:ucd --long srcdir:,update,clean,destdir: -n ${PROG_NAME} -- "$@" || usage 1)
+	eval set -- "$TEMP"
+
+	destdir="DESTDIR"
+	while true; do
+		case $1 in
+		-s|--srcdir)
+			shift
+			srcdir="$1"
+			shift
+			;;
+		-u|--update)
+			shift
+			only_update=1
+			;;
+		-c|--clean)
+			shift
+			do_clean=1
+			;;
+		-d|--destdir)
+			shift
+			destdir=$1
+			shift
+			;;
+		--)
+			shift; break;
+			;;
+		esac
+	done
+
+	prepare_env
+
+	if test -z "$only_update"; then
+		build_objects "$@"
+	fi
+	build_kpatches
+}
+
+main "$@"

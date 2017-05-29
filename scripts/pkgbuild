@@ -1,0 +1,397 @@
+#!/bin/bash
+
+echo '+ set -x'
+set -x
+if [ -z "$SOURCING" ]; then
+	set -e
+fi
+
+die() {
+	echo "$@"
+	if test -f "/etc/kcbuildsigstop"; then
+		kill -SIGSTOP $$
+	fi
+	exit 1
+}
+
+usage() {
+	echo "Usage: build [--prebuild] [--help] [--arch ARCH] DIR"
+	echo "    -p|--prebuild     prebuild project for further use"
+	echo "    -a|--arch ARCH    target architecture(x86_64 by default)"
+	echo "    -h|--help         print this message"
+	echo "    DIR               directory with project's info file and other resources"
+}
+
+prepare() {
+	# Parse cmdline args
+	ACTION=build
+	ARCH=x86_64
+	PDIR=
+	while [ "$1" != "" ]; do
+		case $1 in
+		-p|--prebuild)
+			ACTION=prebuild
+			;;
+		-a|--arch)
+			shift
+			ARCH=$1
+			;;
+		-h|--help)
+			usage
+			exit 0
+			;;
+		*)
+			if [ -n "$PDIR" ] || [[ $1 == -* ]]; then
+				echo "Unknown option $1"
+				usage
+				exit 1
+			fi
+			PDIR=$(cd "$(dirname "$1")" && pwd)/$(basename "$1")
+			;;
+		esac
+		shift
+	done
+
+	# Export env vars that are needed during the build
+	SCRIPTS="$(cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd)"
+	SPWD="$(realpath $SCRIPTS/../../)"
+	export KPATCH_PATH=$SPWD/kpatch
+	export OLDPATH=$PATH
+	export PATH=$SPWD/bin:$PATH
+	export KPATCH_PASSTHROUGH_ASM=1
+	CPUS=`cat /proc/cpuinfo | grep ^processor | wc -l`
+	export PARALLEL=-j$[CPUS*2]
+	export RPM_BUILD_NCPUS=$[CPUS*2]
+
+	# Obtain information about the project
+	source $PDIR/info
+}
+
+clean_dirs() {
+	echo "  cleaning up"
+	rm -rf $KP_PROJECT_BUILD_ROOT /root/root.original /root/root.patched
+}
+
+kp_pack_prebuilt() {
+	echo "  packing prebuilt $KP_PROJECT into $KP_PROJECT_PREBUILT"
+	pushd $KP_PROJECT_BUILD_ROOT
+		tar -zcf /kcdata/$KP_PROJECT_PREBUILT		\
+			$KP_PROJECT_BUILD_ROOT			\
+			/root/root.original
+	popd
+}
+
+kp_unpack_prebuilt() {
+	echo "  unpacking prebuilt $KP_PROJECT into $KP_PROJECT_PREBUILT"
+	tar -xf /kcdata/$KP_PROJECT_PREBUILT -C /
+
+	yum-builddep -d 1 -y $KP_PROJECT_BUILD_ROOT/SPECS/$KP_PROJECT_SPEC
+}
+
+kp_prepare_source_raw() {
+	mkdir -p $KP_PROJECT_BUILD_ROOT
+	pushd $KP_PROJECT_BUILD_ROOT
+		tar -xf $PDIR/$KP_PROJECT_SOURCE
+		mkdir -p $KP_PROJECT_BUILD_DIR
+	popd
+}
+
+kp_prepare_source_rpm() {
+	rm -rf $HOME/deps
+	eval yum-builddep -d 1 -y $KP_RPM_REPOS				\
+			--downloadonly --downloaddir=$HOME/deps		\
+			/kcdata/$KP_PROJECT_SOURCE
+	mkdir -p $KP_PROJECT_BUILD_ROOT
+	rpm -qa > $KP_PROJECT_BUILD_ROOT/all-packages.txt
+	ls $HOME/deps > $KP_PROJECT_BUILD_ROOT/dependencies.txt
+	eval yum-builddep -d 1 -y	$KP_RPM_REPOS			\
+			/kcdata/$KP_PROJECT_SOURCE
+
+	sed -i 's/.rpm$//g' $KP_PROJECT_BUILD_ROOT/dependencies.txt
+
+	rpm -ivh /kcdata/$KP_PROJECT_SOURCE
+}
+
+kp_prepare_source_deb() {
+	echo "deb support is not implemented yet"
+	exit 1
+}
+
+kp_prepare_source() {
+	echo "  preparing source for $KP_PROJECT"
+	kp_prepare_source_$KP_PROJECT_FORMAT
+}
+
+kp_patch_source() {
+	echo "  patching project"
+	PATCH_DIR=$SPWD/patches
+	#patch_list_apply requires this dir
+	mkdir -p /tmp/build.kpatch
+	$SPWD/common/patch_list_apply $KP_PROJECT_DIR $PDIR/plist $PATCH_DIR
+}
+
+kp_prebuild_rpm() {
+	export KPATCH_STAGE=original
+
+	eval yum-builddep -d 1 $KP_RPM_REPOS \
+		-y $KP_PROJECT_BUILD_ROOT/SPECS/$KP_PROJECT_SPEC
+
+	eval rpmbuild --nocheck --noclean 				\
+		-bc 							\
+		$KP_RPMBUILD_FLAGS					\
+		$KP_PROJECT_BUILD_ROOT/SPECS/$KP_PROJECT_SPEC 2>&1 |	\
+		tee $KP_PROJECT_BUILD_ROOT/prebuild.log
+}
+
+_kp_install_orig_rpm() {
+	for rpmfile in $KP_ORIG_RPMS; do
+		pkgname="$(basename $rpmfile)"
+		pkgname="${pkgname%%.rpm}"
+		eval yumdownloader --enablerepo=base-debuginfo $KP_RPM_REPOS \
+			--destdir=$HOME/rpms.orig $pkgname
+	done
+
+	rpm	--force -i $HOME/rpms.orig/*.rpm \
+		--root=$HOME/root.original \
+		--nodeps --noscripts
+}
+
+kp_install_orig_rpm() {
+	_kp_install_orig_rpm
+}
+
+kp_prebuild_hook() {
+	:
+}
+
+kp_prebuild() {
+	echo "  prebuilding $KP_PROJECT"
+	kp_prebuild_$KP_PROJECT_FORMAT
+	kp_install_orig_$KP_PROJECT_FORMAT
+}
+
+de_offset_syms() {
+	local binary=$1
+
+	readelf -WSs $binary > $binary.symlist 2>/dev/null
+	$SCRIPTS/de-offset-syms.awk $binary.symlist > $binary.symlist.tmp
+	sort $binary.symlist.tmp > $binary.symlist
+	rm -f $binary.symlist.tmp
+}
+
+kp_sanity_check() {
+	pushd $HOME/root.patched
+		local targets="$(find . -perm /0111 -type f)"
+	popd
+
+	local failed=""
+	for target in $targets; do
+		local original="$HOME/root.original/usr/lib/debug/$target.debug"
+		local patched="$HOME/root.patched/$target"
+		local alloweddiff="$PDIR/$(basename "$target").symlist.diff"
+
+		de_offset_syms $original
+		if test ! -s $original.symlist; then
+			original="$HOME/root.original/$target"
+			de_offset_syms $original
+		fi
+
+		de_offset_syms $patched
+
+		if ! test -f "$alloweddiff"; then
+			if ! diff -qu $original.symlist $patched.symlist >/dev/null; then
+				failed="$failed $original.symlist vs $patched.symlist"
+			fi
+		else
+			local symlistdiff=$(mktemp --tmpdir)
+			diff -u $original.symlist $patched.symlist > $symlistdiff || :
+			sed -i '1,2d' $symlistdiff
+			if ! cmp $symlistdiff $alloweddiff; then
+				failed="$failed $original.symlist vs $patched.symlist"
+			else
+				warning="$warning $original.symlist vs $patched.symlist"
+			fi
+		fi
+	done
+
+	if test -n "$failed"; then
+		die "Failed sanity check for $failed"
+	fi
+}
+
+kp_build_rpm() {
+	eval rpmbuild --nocheck --noclean			\
+		--short-circuit					\
+		-bc						\
+		$KP_RPMBUILD_FLAGS				\
+		$KP_PROJECT_BUILD_ROOT/SPECS/$KP_PROJECT_SPEC
+}
+
+kp_install_generic() {
+	local ROOT_PATCHED="$HOME/root.patched"
+
+	eval set -- $KP_INSTALL_FILES
+	while test -n "$1"; do
+		local buildpath="$1"
+		local installpath="$2"
+		shift 2
+
+		if test "$installpath" = "IGNORE"; then
+			continue
+		fi
+
+		installpath="$ROOT_PATCHED/$installpath"
+
+		mkdir -p "$(dirname "$installpath")"
+
+		/bin/cp -ra $KP_PROJECT_BUILD_DIR/$buildpath $installpath
+	done
+
+	local failed=
+	pushd $KP_PROJECT_BUILD_DIR
+		set -- $(find . -perm /0111 -type f)
+
+		for local_patched; do
+			local_patched="${local_patched#./}"
+			if ! eu-readelf -S $local_patched 2>/dev/null | grep -q '.kpatch'; then
+				continue
+			fi
+
+			# $local_patched can't be last in the list since it is
+			# src path.
+			if test "${KP_INSTALL_FILES#*/$local_patched }" = \
+							"$KP_INSTALL_FILES"; then
+				failed="/$local_patched $failed"
+			fi
+		done
+
+	popd
+
+	if test -n "$failed"; then
+		die "Files $failed patched but are not listed, aborting"
+	fi
+}
+
+kp_install_rpm() {
+	kp_install_orig_rpm
+	kp_install_generic
+}
+
+kp_build_hook() {
+	:
+}
+
+kp_build() {
+	echo "  building $KP_PROJECT"
+
+	export KPATCH_STAGE=patched
+	# This option tells ld to keep relocations
+	export KPCC_APPEND_ARGS="-Wl,-q"
+
+	kp_build_$KP_PROJECT_FORMAT
+	kp_install_$KP_PROJECT_FORMAT
+}
+
+kp_gen_kpatch() {
+	echo "  generating kpatches"
+
+	pushd $HOME/root.patched
+		targets=$(find . -perm /0111 -type f)
+	popd
+
+	rm -rf $HOME/${KP_PROJECT_PATCH%.*}
+	mkdir $HOME/${KP_PROJECT_PATCH%.*}
+
+	local no_patches=1
+
+	for t in $targets; do
+		local debug="$HOME/root.original/usr/lib/debug/$t.debug"
+		local patched="$HOME/root.patched/$t"
+		local buildid=$(eu-readelf -n $debug | sed -n '/Build ID:/ { s/.* //; p }')
+		if test -z "$buildid"; then
+			continue
+		fi
+
+		if ! eu-readelf -S $patched | grep -q '.kpatch'; then
+			continue
+		fi
+
+		chmod u+w $debug $patched
+
+		eu-unstrip "$HOME/root.original/$t" "$debug"
+
+		$KPATCH_PATH/kpatch_strip --user --strip $patched $patched.kpstripped
+		cp $patched.kpstripped $patched.relfixup
+		$KPATCH_PATH/kpatch_strip --rel-fixup $debug $patched.relfixup
+		cp $patched.relfixup $patched.stripped
+		/usr/bin/strip --strip-unneeded $patched.stripped
+		cp $patched.stripped $patched.undolink
+		$KPATCH_PATH/kpatch_strip --undo-link $debug $patched.undolink
+		$KPATCH_PATH/kpatch_make -n ${debug%%*/} -v "$buildid" $patched.undolink -o $patched.kpatch
+		cp $patched.kpatch $HOME/${KP_PROJECT_PATCH%.*}/$buildid.kpatch
+		no_patches=0
+	done
+
+	if test $no_patches -gt 0; then
+		die "No binary patches found. Are your source patches correct?"
+	fi
+}
+
+kp_pack_patch() {
+	echo "  packing patch for $KP_PROJECT into $KP_PROJECT_PATCH"
+	pushd $KP_PROJECT_BUILD_DIR
+		tar -zcf /kcdata/$KP_PROJECT_PATCH $HOME/${KP_PROJECT_PATCH%.*}
+	popd
+}
+
+overwrite_utils() {
+	ln -fs /kernelcare/kpatch/kpatch_cc /kernelcare/bin/gcc
+	ln -fs /kernelcare/kpatch/kpatch_cc /kernelcare/bin/cc
+	ln -fs /kernelcare/kpatch/kpatch_cc /kernelcare/bin/g++
+	if ! test -x /usr/bin/g++; then
+		rm -f /kernelcare/bin/g++
+	fi
+	if ! test -x /usr/bin/gcc; then
+		rm -f /kernelcare/bin/gcc
+	fi
+
+	export PATH=/kernelcare/bin:$PATH
+}
+
+kp_patch_test() {
+	:
+}
+
+main() {
+	echo "Starting at "`date +%T`"..."
+
+	prepare "$@"
+
+	clean_dirs
+
+	overwrite_utils
+
+	if [ "$ACTION" == "prebuild" ]; then
+		kp_prepare_source
+		kp_prebuild_hook
+		kp_prebuild
+		kp_pack_prebuilt
+	else
+		kp_unpack_prebuilt
+		kp_patch_source
+		kp_build_hook
+		kp_build
+		kp_sanity_check
+		kp_gen_kpatch
+		kp_patch_test
+		kp_pack_patch
+	fi
+
+	#clean_dirs
+
+	echo "Finished at "`date +%T`"..."
+}
+
+if [ -z "$SOURCING" ]; then
+	main "$@"
+fi

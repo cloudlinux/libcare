@@ -1,0 +1,11 @@
+--- ./ifunc.c	2016-06-22 10:51:05.056000000 -0400
++++ ./ifunc.c	2016-06-22 10:51:09.641000000 -0400
+@@ -5,7 +5,7 @@
+ 
+ void local_print_greetings(void)
+ {
+-	print_greetings_unpatched();
++	print_greetings_patched();
+ }
+ 
+ int main()

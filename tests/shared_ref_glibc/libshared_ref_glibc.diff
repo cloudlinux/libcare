@@ -1,0 +1,9 @@
+--- ./libshared_ref_glibc.c	2016-02-07 21:05:13.564346849 +0300
++++ ./libshared_ref_glibc.c	2016-02-07 21:05:21.748640167 +0300
+@@ -2,5 +2,5 @@
+ 
+ void print_greetings(void)
+ {
+-	printf("Hello from UNPATCHED shared library\n");
++	printf("Hello from PATCHED shared library\n");
+ }

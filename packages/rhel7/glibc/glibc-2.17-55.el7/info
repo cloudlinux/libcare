@@ -1,0 +1,129 @@
+#!/bin/bash
+
+KP_PROJECT=glibc
+KP_PROJECT_FORMAT=rpm
+KP_PROJECT_BUILD_ROOT=/root/rpmbuild
+
+KP_PROJECT_SPEC=glibc.spec
+
+KP_PROJECT_DIR=$KP_PROJECT_BUILD_ROOT/BUILD/glibc-2.17-c758a686
+KP_PROJECT_BUILD_DIR=$KP_PROJECT_DIR/build-x86_64-redhat-linux
+
+KP_PROJECT_SOURCE=glibc-2.17-55.el7.src.rpm
+KP_PROJECT_BINARY=glibc-2.17-55.el7.$ARCH.rpm
+
+KP_PROJECT_PREBUILT=build.orig-$KP_PROJECT_BINARY.tgz
+KP_PROJECT_PATCH=kpatch-${KP_PROJECT_BINARY%.*}.tgz
+KP_RPMBUILD_FLAGS="'--define=dist .el7'"
+KP_RPM_REPOS="--enablerepo=C7.0.1406-base"
+
+KP_ORIG_RPMS="
+nscd-2.17-55.el7.x86_64
+glibc-2.17-55.el7.x86_64
+glibc-debuginfo-2.17-55.el7.x86_64
+glibc-debuginfo-common-2.17-55.el7.x86_64"
+
+# TODO(pboldin): this list is incomplete, enhance it as needed (e.g. tests
+# failing)
+KP_INSTALL_FILES="
+/nscd/nscd /usr/sbin/nscd
+/linkobj/libc.so IGNORE
+/libc.so /lib64/libc-2.17.so
+/rt/librt.so /lib64/librt-2.17.so
+/nptl/libpthread.so /lib64/libpthread-2.17.so
+/math/libm.so /lib64/libm-2.17.so
+/rtkaio/librtkaio.so /lib64/rtkaio/librtkaio-2.17.so
+"
+
+KPATCH_ASM_DIR=$KP_PROJECT_BUILD_ROOT/asmdir
+export KPATCH_ASM_DIR
+
+KPCC_PATCH_ARGS="--force-gotpcrel;--os=rhel6;--ignore-changes=banner,compilation"
+export KPCC_PATCH_ARGS
+
+KPCC_DBGFILTER_ARGS="--dbg-filter;--dbg-filter-eh-frame;--dbg-filter-gcc-except-table;--os=rhel6"
+export KPCC_DBGFILTER_ARGS
+
+kp_prebuild_hook() {
+	sed -i 's/run_glibc_tests 1/run_glibc_tests 0/' \
+		$KP_PROJECT_BUILD_ROOT/SPECS/$KP_PROJECT_SPEC
+}
+
+kp_build_hook() {
+	sed -i '/\(mkdir\|rm -rf\) \$builddir/ s/^/#/'	\
+		$KP_PROJECT_BUILD_ROOT/SPECS/$KP_PROJECT_SPEC
+}
+
+# Replace patch build results with original libraries for testing
+_install_originals() {
+	eval set -- $KP_INSTALL_FILES
+	while test -n "$1"; do
+		local buildpath="$1"
+		local installpath="$2"
+		shift 2
+
+		if test "$installpath" = "IGNORE"; then
+			continue
+		fi
+
+		/bin/cp -r /root/root.original/$installpath $KP_PROJECT_BUILD_DIR/$buildpath
+	done
+}
+
+_run_tests() {
+	export LD_PRELOAD=/kernelcare/user/execve/execve.so
+
+	local ld_linux="$KP_PROJECT_BUILD_DIR/elf/ld*"
+
+	export KP_EXECVE_PATTERN="+($ld_linux)"
+	#export KP_EXECVE_DEBUG=1
+
+	LD_LIBRARY_PATH=
+	export LD_LIBRARY_PATH
+
+	export KCPATH=$PATH
+	export PATH=$OLDPATH
+
+	export TIMEOUTFACTOR=16
+	parent=$$
+	( make $PARALLEL -k check 2>&1
+	  sleep 10s
+	  teepid="`ps -eo ppid,pid,command | awk '($1 == '${parent}' && $3 ~ /^tee/) { print $2 }'`"
+	  [ -n "$teepid" ] && kill $teepid
+	) | tee check.log || :
+
+	echo ====================TESTING DETAILS=================
+	for i in `sed -n 's|^.*\*\*\* \[\([^]]*\.out\)\].*$|\1|p' check.log`; do
+		echo =====$i=====
+		cat $i || :
+		echo ============
+	done
+	echo ====================TESTING END=====================
+
+	export PATH=$KCPATH
+}
+
+kp_patch_test() {
+	_install_originals
+
+	PATCH_ROOT=/root/${KP_PROJECT_PATCH%.*} \
+		/kernelcare/user/execve/listener >/root/test.log 2>&1 & :
+	LISTENER_PID=$!
+
+	pushd $KP_PROJECT_BUILD_DIR
+
+	(trap 'kill -9 '$LISTENER_PID'' 0;
+	 _run_tests)
+
+	local executed=$(awk '/^(env.*)?\/[^ ]*\/ld/ { n++ } END { print n }' check.log)
+
+	popd
+
+	local patched=$(awk '/kpatch_ctl targeting/ { n++ } END { print n }' /root/test.log)
+
+	test $patched -ge $executed
+
+	grep -vq 'No patch(es) applicable to' /root/test.log
+	grep 'patch hunk(s) have been successfully applied' /root/test.log \
+		| wc -l
+}

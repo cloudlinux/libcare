@@ -1,0 +1,18 @@
+--- ./new_func.c	2016-02-03 22:17:10.665376232 +0300
++++ ./new_func.c	2016-02-03 22:17:48.688490849 +0300
+@@ -6,9 +6,14 @@ char *print_greetings_patched(void)
+ 	printf("Hello. This is a PATCHED version\n");
+ }
+ 
++void newly_added_function(void)
++{
++	print_greetings_patched();
++}
++
+ void print_greetings(void)
+ {
+-	printf("Hello. This is an UNPATCHED version\n");
++	newly_added_function();
+ }
+ 
+ int main()

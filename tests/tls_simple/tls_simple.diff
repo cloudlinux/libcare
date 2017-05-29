@@ -1,0 +1,16 @@
+--- ./tls_simple.c	2016-07-15 14:13:57.734443175 +0200
++++ ./tls_simple.c	2016-07-15 14:14:09.523350690 +0200
+@@ -7,7 +7,12 @@
+ 
+ void print_greetings(void)
+ {
+-	printf("TLS UNPATCHED\n");
++	if (p == &v && v == 0xDEADBEAF) {
++		printf("TLS PATCHED\n");
++	} else {
++		/* Provoke segfault w/o messing with %rax */
++		asm ("movl $0, %ebx; movl $0, (%rbx)");
++	}
+ }
+ 
+ int main()

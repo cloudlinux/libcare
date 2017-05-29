@@ -1,0 +1,5 @@
+
+HAS_LIBRARY := 1
+DIFFEXT := diff2
+
+include ../makefile.inc

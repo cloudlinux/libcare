@@ -1,0 +1,21 @@
+--- a/fail_threading.c	2016-01-28 14:02:33.225472198 +0000
++++ b/fail_threading.c	2016-01-28 14:02:49.645610472 +0000
+@@ -17,16 +17,8 @@ static void *func(void *);
+ 
+ static int payload(pthread_t *thread)
+ {
+-	int rv;
+-
+-	nanosleep(&short_sleep, NULL);
+-	rv = pthread_create(thread, NULL, func, (void *)1UL);
+-	printf("HELLO FROM UNPATCHED\n");
+-	if (rv == -1)
+-		abort();
+-	nanosleep(&long_sleep, NULL);
+-
+-	return 1;
++	printf("HELLO FROM PATCHED\n");
++	return 0;
+ }
+ 
+ static void *func(void *data)

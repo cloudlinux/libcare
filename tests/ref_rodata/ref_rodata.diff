@@ -1,0 +1,11 @@
+--- a/ref_rodata.c     2016-02-02 18:05:48.880037651 +0300
++++ b/ref_rodata.c     2016-02-02 18:10:00.303019957 +0300
+@@ -5,7 +5,7 @@
+ 
+ char *get_msg(void)
+ {
+-	return msg;
++	return msg + 2;
+ }
+ 
+ void print_greetings(void)

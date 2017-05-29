@@ -1,0 +1,11 @@
+--- ./ref_glibc_data.c	2016-05-31 19:21:26.701317475 +0300
++++ ./ref_glibc_data.c	2016-05-31 19:21:41.817395022 +0300
+@@ -3,7 +3,7 @@
+ 
+ void local_print_greetings(void)
+ {
+-	printf("Hello from UNPATCHED\n");
++	fprintf(stderr, "Hello from PATCHED\n");
+ }
+ 
+ int main()

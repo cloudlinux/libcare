@@ -1,0 +1,10 @@
+--- ./patchlevel.c	2016-05-11 03:49:22.378062900 +0300
++++ ./patchlevel.c	2016-05-11 03:49:36.362130679 +0300
+@@ -6,6 +6,7 @@
+ void local_print_greetings(void)
+ {
+ 	print_greetings();
++	printf("Welcome from SEMIPATCHED binary!\n");
+ }
+ 
+ int main()

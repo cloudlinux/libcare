@@ -1,0 +1,11 @@
+--- ./libtls_shared.c	2016-02-05 21:36:39.967343528 +0300
++++ ./libtls_shared.c	2016-02-05 22:06:58.113719493 +0300
+@@ -12,5 +12,7 @@ void print_third_greetings(void)
+ 
+ void print_greetings(void)
+ {
+-	print_second_greetings();
++	if (tls_abc == 10) {
++		print_third_greetings();
++	}
+ }

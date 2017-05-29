@@ -1,0 +1,11 @@
+--- ./fail_busy_single_top.c	2016-07-21 16:39:21.860750661 +0300
++++ ./fail_busy_single_top.c	2016-07-21 16:39:07.238092509 +0300
+@@ -15,7 +15,7 @@ void print_greetings(void)
+ void do_work2() {
+ 	volatile int i = 0;
+ 	while (1) {
+-		print_greetings();
++		print_greetings_patched();
+ 		for (i = 0; i < INT_MAX / 50; i++)
+ 			asm ("pause");
+ 	}

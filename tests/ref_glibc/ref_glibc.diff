@@ -1,0 +1,11 @@
+--- ./ref_glibc.c	2016-02-07 18:19:06.154834106 +0300
++++ ./ref_glibc.c	2016-02-07 18:19:16.709477075 +0300
+@@ -3,7 +3,7 @@
+ 
+ void print_greetings(void)
+ {
+-	printf("Hello. This is an UNPATCHED version!\n");
++	puts("Hello. This is a PATCHED version!\n");
+ }
+ 
+ int main()

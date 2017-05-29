@@ -1,0 +1,11 @@
+--- ./ref_orig_single.c	2016-02-02 16:57:36.541619206 +0300
++++ ./ref_orig_single.c	2016-02-02 16:57:54.144432487 +0300
+@@ -13,7 +13,7 @@ void print_third_greetings(void)
+ 
+ void print_greetings(void)
+ {
+-	print_second_greetings();
++	print_third_greetings();
+ }
+ 
+ int main()

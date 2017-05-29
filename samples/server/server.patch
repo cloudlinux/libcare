@@ -1,0 +1,12 @@
+--- a/server.c	2017-05-26 12:54:44.456787454 +0300
++++ b/server.c	2017-05-26 12:55:03.912872313 +0300
+@@ -21,8 +21,8 @@
+ {
+ 	char buf[16];
+ 
+-	(void) recv(sock, buf, 128, 0); /* bug is here */
++	(void) recv(sock, buf, sizeof(buf), 0); /* bug was here */
+	fprintf(stdout, "Got %s\n", buf);
+ 	close(sock);
+ }
+ 

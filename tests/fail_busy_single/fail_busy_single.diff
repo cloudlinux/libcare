@@ -1,0 +1,11 @@
+--- ./fail_busy_single.c	2016-02-03 22:06:15.402608283 +0300
++++ ./fail_busy_single.c	2016-02-03 22:06:33.738579308 +0300
+@@ -19,7 +19,7 @@ void do_work2() {
+ }
+ 
+ void do_work() {
+-	do_work2();
++	print_greetings_patched();
+ }
+ 
+ int main()

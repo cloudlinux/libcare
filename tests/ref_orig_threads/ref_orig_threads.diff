@@ -1,0 +1,11 @@
+--- ./ref_orig_threads.c	2016-02-02 23:22:54.560688975 +0300
++++ ./ref_orig_threads.c	2016-02-02 23:23:05.112124251 +0300
+@@ -14,7 +14,7 @@ void print_greetings1(void)
+ 
+ void print_greetings2(void)
+ {
+-	printf("Hello from thread2 (UNPATCHED)\n");
++	print_patch();
+ }
+ 
+ void *thread1_func(void *unused)
