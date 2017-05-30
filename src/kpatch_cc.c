@@ -637,7 +637,7 @@ static int run_cmd(const char **argv, const char *path)
 	pid = vfork();
 	if (pid == 0) {
 		execv(path ?: argv[0], (char * const *)argv);
-		kpccfatal("execv(%s): %s\n", argv[0], strerror(errno));
+		kpccfatal("execv(%s): %s\n", path ?: argv[0], strerror(errno));
 		exit(EXIT_FAILURE);
 	} else {
 		int rv = waitpid(pid, &status, __WALL);

@@ -1,0 +1,4 @@
+
+LDLIBS += -lpthread
+
+all: GHOST

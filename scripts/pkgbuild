@@ -54,10 +54,9 @@ prepare() {
 
 	# Export env vars that are needed during the build
 	SCRIPTS="$(cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd)"
-	SPWD="$(realpath $SCRIPTS/../../)"
-	export KPATCH_PATH=$SPWD/kpatch
+	SPWD="$(realpath $SCRIPTS/../)"
+	export KPATCH_PATH=$SPWD/src
 	export OLDPATH=$PATH
-	export PATH=$SPWD/bin:$PATH
 	export KPATCH_PASSTHROUGH_ASM=1
 	CPUS=`cat /proc/cpuinfo | grep ^processor | wc -l`
 	export PARALLEL=-j$[CPUS*2]
@@ -65,6 +64,8 @@ prepare() {
 
 	# Obtain information about the project
 	source $PDIR/info
+
+	mkdir -p /kcdata
 }
 
 clean_dirs() {
@@ -96,6 +97,11 @@ kp_prepare_source_raw() {
 	popd
 }
 
+kp_download_source_rpm() {
+	mkdir -p /kcdata
+	curl $KP_PROJECT_SOURCE_URL -o /kcdata/$KP_PROJECT_SOURCE
+}
+
 kp_prepare_source_rpm() {
 	rm -rf $HOME/deps
 	eval yum-builddep -d 1 -y $KP_RPM_REPOS				\
@@ -118,6 +124,8 @@ kp_prepare_source_deb() {
 }
 
 kp_prepare_source() {
+	echo "  downloading source for $KP_PROJECT"
+	kp_download_source_$KP_PROJECT_FORMAT
 	echo "  preparing source for $KP_PROJECT"
 	kp_prepare_source_$KP_PROJECT_FORMAT
 }
@@ -127,7 +135,7 @@ kp_patch_source() {
 	PATCH_DIR=$SPWD/patches
 	#patch_list_apply requires this dir
 	mkdir -p /tmp/build.kpatch
-	$SPWD/common/patch_list_apply $KP_PROJECT_DIR $PDIR/plist $PATCH_DIR
+	$SPWD/scripts/patch_list_apply $KP_PROJECT_DIR $PDIR/plist $PATCH_DIR
 }
 
 kp_prebuild_rpm() {
@@ -320,14 +328,14 @@ kp_gen_kpatch() {
 
 		eu-unstrip "$HOME/root.original/$t" "$debug"
 
-		$KPATCH_PATH/kpatch_strip --user --strip $patched $patched.kpstripped
+		$KPATCH_PATH/kpatch_strip --strip $patched $patched.kpstripped
 		cp $patched.kpstripped $patched.relfixup
 		$KPATCH_PATH/kpatch_strip --rel-fixup $debug $patched.relfixup
 		cp $patched.relfixup $patched.stripped
 		/usr/bin/strip --strip-unneeded $patched.stripped
 		cp $patched.stripped $patched.undolink
 		$KPATCH_PATH/kpatch_strip --undo-link $debug $patched.undolink
-		$KPATCH_PATH/kpatch_make -n ${debug%%*/} -v "$buildid" $patched.undolink -o $patched.kpatch
+		$KPATCH_PATH/kpatch_make -b "$buildid" $patched.undolink -o $patched.kpatch
 		cp $patched.kpatch $HOME/${KP_PROJECT_PATCH%.*}/$buildid.kpatch
 		no_patches=0
 	done
@@ -345,17 +353,20 @@ kp_pack_patch() {
 }
 
 overwrite_utils() {
-	ln -fs /kernelcare/kpatch/kpatch_cc /kernelcare/bin/gcc
-	ln -fs /kernelcare/kpatch/kpatch_cc /kernelcare/bin/cc
-	ln -fs /kernelcare/kpatch/kpatch_cc /kernelcare/bin/g++
+	TMPBIN=$(mktemp -d --tmpdir)
+
+	mkdir $TMPBIN/bin
+	ln -fs /libcare/src/kpatch_cc $TMPBIN/gcc
+	ln -fs /libcare/src/kpatch_cc $TMPBIN/cc
+	ln -fs /libcare/src/kpatch_cc $TMPBIN/g++
 	if ! test -x /usr/bin/g++; then
-		rm -f /kernelcare/bin/g++
+		rm -f $TMPBIN/g++
 	fi
 	if ! test -x /usr/bin/gcc; then
-		rm -f /kernelcare/bin/gcc
+		rm -f $TMPBIN/gcc
 	fi
 
-	export PATH=/kernelcare/bin:$PATH
+	export PATH=$TMPBIN:$PATH
 }
 
 kp_patch_test() {

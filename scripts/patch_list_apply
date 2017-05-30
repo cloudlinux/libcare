@@ -1,0 +1,53 @@
+#!/bin/bash
+# Applies list of patches to the specified directory
+# It takes three arguments:
+# SRC_DIR - directory with sources to be patched
+# PLIST - path to the file which contains list of patches in order they should be applied
+# PDIR - path to the directory which contains all patches from the PLIST
+
+get_abs_filename() {
+	echo "$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
+}
+
+SRC_DIR=$(get_abs_filename $1)
+PLIST=$(get_abs_filename $2)
+PDIR=$(get_abs_filename $3)
+TEMP_PLIST=/tmp/build.kpatch/tmpplist
+
+if [ ! -f $PLIST ]; then
+	echo "File $PLIST not found"
+	exit 1;
+fi
+
+echo "patching $PWD with patches from $PLIST"
+
+pushd $SRC_DIR # go to the directory with sources to be patched
+
+#in case we don't have a newline in plist
+cat $PLIST > $TEMP_PLIST
+echo -e "\n" >> $TEMP_PLIST
+
+# iterate through patches in PLIST
+while read NAME
+do
+	COMMENT=`echo $NAME | cut -c1`
+	if [ "$COMMENT" == "#" ]; then
+		continue;
+	fi
+
+	if [ -z "${NAME}" ]; then
+		continue;
+	fi
+
+	echo "Applying patch $NAME"
+	patch -p1 -u --fuzz=0 --batch < $PDIR/$NAME
+	if [ $? != 0 ];
+	then
+		echo "Failed applying patch $NAME"; popd; rm $TEMP_PLIST; exit 1
+	else
+		echo "Successfully applied patch $NAME"
+	fi
+done < $TEMP_PLIST
+rm $TEMP_PLIST
+
+popd

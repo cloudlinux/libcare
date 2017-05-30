@@ -9,6 +9,7 @@ KP_PROJECT_SPEC=glibc.spec
 KP_PROJECT_DIR=$KP_PROJECT_BUILD_ROOT/BUILD/glibc-2.17-c758a686
 KP_PROJECT_BUILD_DIR=$KP_PROJECT_DIR/build-x86_64-redhat-linux
 
+KP_PROJECT_SOURCE_URL=ftp://bo.mirror.garr.it/2/scientific/7x/SRPMS/vendor/glibc-2.17-55.el7.src.rpm
 KP_PROJECT_SOURCE=glibc-2.17-55.el7.src.rpm
 KP_PROJECT_BINARY=glibc-2.17-55.el7.$ARCH.rpm
 
@@ -71,7 +72,7 @@ _install_originals() {
 }
 
 _run_tests() {
-	export LD_PRELOAD=/kernelcare/user/execve/execve.so
+	export LD_PRELOAD=/libcare/execve/execve.so
 
 	local ld_linux="$KP_PROJECT_BUILD_DIR/elf/ld*"
 
@@ -106,8 +107,9 @@ _run_tests() {
 kp_patch_test() {
 	_install_originals
 
+	KPATCH_TOOLS=/libcare/src		\
 	PATCH_ROOT=/root/${KP_PROJECT_PATCH%.*} \
-		/kernelcare/user/execve/listener >/root/test.log 2>&1 & :
+		/libcare/execve/listener >/root/test.log 2>&1 & :
 	LISTENER_PID=$!
 
 	pushd $KP_PROJECT_BUILD_DIR
