@@ -573,20 +573,31 @@ EOF
 	fi
 
 
+	nskipped=0
+	nfailed=0
+	nok=0
+	ntotal=0
+
 	FAILED=""
 
 	${FLAVOR}_init "$TESTS"
 	for tst in $TESTS; do
+		ntotal=$(($ntotal + 1))
 		if should_skip $tst; then
 			echo "SKIP: $tst"
+			nskipped=$(($nskipped + 1))
 			continue
 		fi
 		if ! test_one $tst $FLAVOR; then
 			FAILED="${FAILED:+$FAILED }$tst"
+			nfailed=$(($nfailed + 1))
+		else
+			nok=$(($nok + 1))
 		fi
 	done
 	${FLAVOR}_fini
 
+	echo "OK $nok FAIL $nfailed SKIP $nskipped TOTAL $ntotal"
 	if test -n "$FAILED"; then
 		echo "FAILED TESTS: $FAILED"
 		exit 1
