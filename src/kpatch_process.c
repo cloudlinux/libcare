@@ -10,6 +10,7 @@
 #include <sys/mman.h>
 #include <sys/vfs.h>
 #include <sys/stat.h>
+#include <sys/sysmacros.h>
 
 #include <gelf.h>
 #include <libunwind.h>

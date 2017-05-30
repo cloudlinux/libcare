@@ -391,7 +391,7 @@ static void init_func_block(struct kp_file *f, int *i, kpstr_t *nm)
 
 static void init_var_block(struct kp_file *f, int *i, kpstr_t *nm)
 {
-	int s = *i, e = *i, e2, globl = 0, has_body = 0;
+	int s = *i, e = *i, e2, globl = 0;
 	kpstr_t nm2;
 
 	while (e < f->nr_lines) {
@@ -402,7 +402,7 @@ static void init_var_block(struct kp_file *f, int *i, kpstr_t *nm)
 			continue;
 		}
 		if (is_data_def(cline(f, e), ctype(f, e))) {
-			e++; has_body = 1;
+			e++;
 			continue;
 		}
 		break;
