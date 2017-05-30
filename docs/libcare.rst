@@ -5,9 +5,16 @@ Welcome to the LibCare project documentation. Our aim is to be able to patch
 any of your executables or libraries at the run, so you don't have to restart
 your servers whenever a new wild CVE appears.
 
-For instance, your application developer did a typo during server development.
+Sample ``samples/server``
+-------------------------
+
+
+.. _`sample`:
+
+For instance, your backend developer did a typo during server development.
 This typo introduced a stack overflow vulnerability exploitable from the client
-side. Common automatic checks were disabled for the sake of performance.
+side. Common automatic checks were disabled for the sake of performance and now
+your server is vulnerable to anyone who finds the vulnerability.
 
 The sample code is in ``samples/server`` where function ``handle_connection``
 supplies wrong buffer size to the ``recv(2)`` at line 24:
@@ -18,77 +25,108 @@ supplies wrong buffer size to the ``recv(2)`` at line 24:
 	{
 		char buf[16];
 
-		(void) recv(sock, buf, 128, 0); /* bug is here *
+		(void) recv(sock, buf, 128, 0); // bug is here
                 fprintf(stdout, "Got %s\n", buf);
 		close(sock);
 	}
 
-First, build the original server and run it:
+1. Build the original server and run it:
 
-.. code:: console
+ .. code:: console
 
+        $ cd samples/server
 	$ make
 	cc -o server server.c -fno-stack-protector -fomit-frame-pointer
 	$ ./server
 
-Connect to it via `nc`_, install if it is missing since it is requied for the
-following:
+2. Now let's install dependencies and build utils. Refer to `installation`_ for
+   more details on the installation procedure and supported OSes.
 
-.. code:: console
+   For RHEL-based distros do:
 
-        $ nc localhost 3345
+ .. code:: console
+
+        $ sudo yum install -y binutils elfutils elfutils-libelf-devel nc libunwind-devel
+        ...
+        $ make -C ../../src
+        ...
+
+..
+
+ For Debian-based distros do:
+
+ .. code:: console
+
+        $ sudo apt-get install -y binutils elfutils libelf-dev netcat-openbsd libunwind-dev
+        ...
+        $ make -C ../../src
+        ...
+
+3. Try to connect to the server using freshly installed `netcat`_:
+
+ .. code:: console
+
+        $ echo "Hi!" | nc localhost 3345
         Hi!
 
-.. _`nc`: https://www.freebsd.org/cgi/man.cgi?query=nc&sektion=1
+.. _`netcat`: https://www.freebsd.org/cgi/man.cgi?query=nc&sektion=1
 
-Server should respond with::
+ Server should print on its console:
 
+ .. code:: console
+
+        $ ./server
         Got Hi!
 
-Now exploit the server via ``hack.sh`` script. The script analyzes binary and
-builds a string that causes server's buffer to overflow.  The string rewrites
-return address stored on the stack with the address of ``you_hacked_me``
-function, which prints "You hacked me!" as server:
 
-.. code:: console
+4. Now exploit the server via ``hack.sh`` script. The script analyzes binary
+   and builds a string that causes server's buffer to overflow.  The string
+   rewrites return address stored on the stack with the address of
+   ``you_hacked_me`` function, which prints "You hacked me!" as server:
+
+ .. code:: console
 
         (console2) $ ./hack.sh
+        (console1) $ ./server
         Got 0123456789ABCDEF01234567@
         You hacked me!
 
-This sample emulates a packaged binary network server vulnerable to
-`return-to-libc attack`_.
+ This sample emulates a packaged binary network server vulnerable to
+ `return-to-libc attack`_.
 
 .. _`return-to-libc attack`: https://en.wikipedia.org/wiki/Return-to-libc_attack
 
-Now build the patch for this code via `kpmake`_:
+5. Now build the patch for this code via `kpmake`_:
 
-.. code:: console
+ .. code:: console
 
         $ ../../src/kpmake --clean server.patch
         ...
         patch for $HOME/libcare/samples/server/kpmake/server is in ...
 
-Examine ``patchroot`` directory and find patches there:
+6. Examine ``patchroot`` directory and find patches there:
 
-.. code:: console
+ .. code:: console
 
         $ ls patchroot
         2d0e03e41bd82ec8b840a973077932cb2856a5ec.kpatch
 
-Apply patch to the running application via `kpatch_user`_:
+7. Apply patch to the running application via `kpatch_user`_:
 
-.. code:: console
+ .. code:: console
 
-        $ ../../src/kpatch_user -v patch-user -p $(pidof server) patchroot
+        $ ../../src/kpatch_user -v patch -p $(pidof server) patchroot
         ...
         1 patch hunk(s) have been successfully applied to PID '31209'
 
-And check the hack again, ``You hacked me!`` string should go away:
+8. And check the hack again, ``You hacked me!`` string should go away:
 
-.. code:: console
+ .. code:: console
 
+        (console2) $ ./hack.sh
+        (console1) $ ./server
         Got 0123456789ABCDEF01234567@
+
 
 Congratulations on going through the sample! Go on and learn how the magic of
 `kpmake`_ script works, read how the patch is `build under the hood`_ and how
@@ -96,6 +134,58 @@ it is applied by the `kpatch_user`_. Or even jump to our `hacking guide`_!
 
 
 .. contents::
+
+Installation and dependencies
+=============================
+
+.. _`installation`:
+
+All the Linux-distros with ``libunwind``, ``elfutils`` and ``binutils``
+packages available are supported.
+
+However, the ``libcare`` was only tested on Ubuntu from 12.04 to 16.04 and on
+CentOS from 6.0 to 7.3.
+
+Dependencies
+------------
+
+To install the dependencies on RHEL/CentOS do the following:
+
+.. code:: console
+
+        $ sudo yum install -y binutils elfutils elfutils-libelf-devel nc libunwind-devel
+
+To install the dependencies on Debian/Ubuntu do the following:
+
+.. code:: console
+
+        $ sudo apt-get install -y binutils elfutils libelf-dev netcat-openbsd libunwind-dev
+
+Building ``libcare``
+--------------------
+
+To build ``libcare`` simply emit at project's root dir:
+
+.. code:: console
+
+        $ make -C src
+        ...
+
+This should build all the utilities required to produce a patch out of some
+project's source code.
+
+It is highly advised to run the tests as well, enabling Doctor ``kpatch_user`` to
+attach ``ptrace``\ cles to any of the processes first:
+
+.. code:: console
+
+        $ sudo setcap cap_sys_ptrace+ep ./src/kpatch_user
+        $ make -C tests && echo OK
+        ...
+        OK
+
+Now all the required tools are built and we can build some patches. Skip to
+`sample`_ for that.
 
 Overview
 ========
@@ -298,20 +388,20 @@ The doctor accepts a few arguments that are common to all types of operations:
 -v      enable verbose output
 -h      show commands list
 
-Applying patches via ``patch-user``
+Applying patches via ``patch``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. _`Patch application`:
 .. _`kpatch_user`:
 
-The ``patch-user`` mode patches a process with id given as
+The ``patch`` mode patches a process with id given as
 argument to ``-p`` option or all of them except self and ``init`` when
 argument is ``all``. The patch (or directory with patches) to be applied
 should be specified as the only positional argument:
 
 .. code:: console
 
- $ kpatch_user patch-user -p <PID_or_all> some_patch_file.kpatch
+ $ kpatch_user patch -p <PID_or_all> some_patch_file.kpatch
 
 Patches are basically ELF files of relocatable type ``REL`` with binary
 metainformation such as BuildID and name of the patch target prepended.
@@ -326,18 +416,18 @@ functions are overwritten with the unconditional jumps to the patched version.
 
 For more details look at the chapter `Patching`_.
 
-Cancelling patches via ``unpatch-user``
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Cancelling patches via ``unpatch``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The ``unpatch-user`` mode makes doctor remove patches listed by target's
+The ``unpatch`` mode makes doctor remove patches listed by target's
 BuildID from the memory of patients. It simply restores original code of the
 patched functions from a stash and puppets patients to ``munmap``\ s the memory
 areas used by patches.
 
-Showing info via ``info-user``
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Showing info via ``info``
+~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Last entry to the ``kpatch_user`` is the ``info-user`` command that lists all
+Last entry to the ``kpatch_user`` is the ``info`` command that lists all
 the objects and their BuildIDs for set of the processes requested. Its
 primarily use is as the utility for the book-keeping software.
 
@@ -433,7 +523,7 @@ build-$test`` or ``make kpmake-$test`` commands.
 Sometimes it is necessary to debug a particular test so all changes MUST
 retain the ability to run the tests manually. The manual run is done by
 executing an appropriate binary (with the ``LD_LIBRARY_PATH`` set as
-needed) and target ``kpatch_user patch-user`` at its process.
+needed) and target ``kpatch_user patch`` at its process.
 
 However, it is advised to run tests by the ``./run_tests.sh`` script
 present in the ``tests`` directory.
@@ -469,16 +559,16 @@ The flavors are:
 
 ``test_patch_files``
      (default) that simply executes a test process and points ``kpatch_ctl
-     patch-user`` to it, doing so for present patches for both binary and
+     patch`` to it, doing so for present patches for both binary and
      shared libraries.
   
 ``test_patch_dir``
      that executes a test and patches it with a per-test patch-containing
-     directory fed to ``kpatch_ctl patch-user``.
+     directory fed to ``kpatch_ctl patch``.
   
 ``test_patch_startup``
      that starts a ``kcare_genl_sink`` helper that listens to notifications
-     about a start of a listed binary and executes ``kpatch_ctl patch-user``
+     about a start of a listed binary and executes ``kpatch_ctl patch``
      with the directory containing patches for all the tests discovered.
 
 ``test_patch_patchlevel``
@@ -562,7 +652,7 @@ binary as is, continuing its normal execution. Otherwise, we enter an
 infinite loop waiting for the signal ``SIGSTOP`` to come, blocking all
 the other signals, **including** ``SIGKILL`` and ``SIGSEGV``. The
 ``doctor`` code executed by the subscribed application such as
-``kcare_genl_sink`` that simply calls ``kpatch_user patch-user`` must
+``kcare_genl_sink`` that simply calls ``kpatch_user patch`` must
 attach to that newborn ``patient`` and apply its remedies.
 
 Source directory ``src``
@@ -1398,7 +1488,7 @@ Now let's apply that:
     i'm unpatched!
     i'm unpatched!
     ...
-    (terminal2) $ kpatch_ctl -v patch-user -p $(pidof foo) ./foo.kpatch
+    (terminal2) $ kpatch_ctl -v patch -p $(pidof foo) ./foo.kpatch
     ...
     (terminal1)
     you patched my tralala
