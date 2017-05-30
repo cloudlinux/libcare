@@ -505,11 +505,11 @@ should_skip() {
 
 main() {
 	if ! check_permissions; then
-		cat <<'EOF'
+		cat <<EOF
 Not enough permissions for kpatch.
 
 Either run as root, or enable ptrace either globally or by
-`sudo setcap cap_sys_ptrace+ep ../src/kpatch_user`.
+\`sudo setcap cap_sys_ptrace+ep $PWD/../src/kpatch_user\`.
 EOF
 		exit 1
 	fi
