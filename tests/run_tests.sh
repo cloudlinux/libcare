@@ -166,6 +166,8 @@ test_unpatch_files() {
 		>$logfile 2>&1 || :
 
 	sleep 1
+
+	kill_reap $pid
 }
 
 test_unpatch_files_fini() {
