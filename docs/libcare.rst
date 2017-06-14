@@ -5,19 +5,23 @@ Welcome to the LibCare project documentation. Our aim is to be able to patch
 any of your executables or libraries at the run, so you don't have to restart
 your servers whenever a new wild CVE appears.
 
+See how it `helps to patch`_ famous GHOST_ vulnerability resulting in a buffer
+overflow in the domain name resolution subroutines of ``glibc``, skip to
+`Contents`_ or straight to the `installation guide`_.
+
 Sample ``samples/server``
 -------------------------
 
 
 .. _`sample`:
 
-For instance, your backend developer did a typo during server development.
+For instance, your backend developer made a typo during server development.
 This typo introduced a stack overflow vulnerability exploitable from the client
 side. Common automatic checks were disabled for the sake of performance and now
-your server is vulnerable to anyone who finds the vulnerability.
+your server is vulnerable to anyone who can find the vulnerability.
 
-The sample code is in ``samples/server`` where function ``handle_connection``
-supplies wrong buffer size to the ``recv(2)`` at line 24:
+The sample code is in ``samples/server/server.c`` where function
+``handle_connection`` supplies wrong buffer size to the ``recv(2)`` at line 24:
 
 .. code:: c
 
@@ -35,14 +39,14 @@ supplies wrong buffer size to the ``recv(2)`` at line 24:
  .. code:: console
 
         $ cd samples/server
-	$ make
+	$ make install DESTDIR=vuln
 	cc -o server server.c -fno-stack-protector -fomit-frame-pointer
-	$ ./server
+	$ ./vuln/server
 
 2. Now let's install dependencies and build utils. Refer to `installation`_ for
    more details on the installation procedure and supported OSes.
 
-   For RHEL-based distros do:
+ For RHEL-based distros do:
 
  .. code:: console
 
@@ -71,23 +75,29 @@ supplies wrong buffer size to the ``recv(2)`` at line 24:
 
 .. _`netcat`: https://www.freebsd.org/cgi/man.cgi?query=nc&sektion=1
 
- Server should print on its console:
+ The server should print on its console:
 
  .. code:: console
 
-        $ ./server
+        $ ./vuln/server
         Got Hi!
 
 
-4. Now exploit the server via ``hack.sh`` script. The script analyzes binary
-   and builds a string that causes server's buffer to overflow.  The string
+4. Now exploit the server via the ``hack.sh`` script. The script analyzes binary
+   and builds a string that causes server's buffer to overflow. The string
    rewrites return address stored on the stack with the address of
-   ``you_hacked_me`` function, which prints "You hacked me!" as server:
+   ``you_hacked_me`` function, which prints "You hacked me!" as a server.
+
+   Open another console and run ``./hack.sh`` there:
 
  .. code:: console
 
-        (console2) $ ./hack.sh
-        (console1) $ ./server
+        $ ./hack.sh
+
+ Server console should print:
+
+ .. code:: console
+
         Got 0123456789ABCDEF01234567@
         You hacked me!
 
@@ -103,6 +113,10 @@ supplies wrong buffer size to the ``recv(2)`` at line 24:
         $ ../../src/kpmake --clean server.patch
         ...
         patch for $HOME/libcare/samples/server/kpmake/server is in ...
+
+ Please note that this overwrites ``./server`` binary file with a
+ patch-containing file, storing the original vulnerable server into
+ ``./kpmake/server``.
 
 6. Examine ``patchroot`` directory and find patches there:
 
@@ -124,31 +138,32 @@ supplies wrong buffer size to the ``recv(2)`` at line 24:
  .. code:: console
 
         (console2) $ ./hack.sh
-        (console1) $ ./server
-        Got 0123456789ABCDEF01234567@
+        (console1) $ # with running ./vuln/server
+        Got 0123456789ABCDEF@
 
 
 Congratulations on going through the sample! Go on and learn how the magic of
-`kpmake`_ script works, read how the patch is `build under the hood`_ and how
+`kpmake`_ script works, read how the patch is `built under the hood`_ and how
 it is applied by the `kpatch_user`_. Or even jump to our `hacking guide`_!
 
 RHEL7 ``glibc`` sample
 ----------------------
 
 .. _`glibc sample`:
+.. _`helps to patch`:
 
 Most of the binaries in the system are coming from distribution packages so
 building patches for them is different from the above. Here is how to do it.
 
-This example builds ``glibc`` patch for old fashioned CVE-2015-0235 GHOST_
+This example builds ``glibc`` patch for an old fashioned CVE-2015-0235 GHOST_
 vulnerability for RHEL7. The build is done using `scripts/pkgbuild`_ and
-package files are stored in ``../packages/rhel7/glibc/glibc-2.17-55.el7``.
+package files are stored in ``packages/rhel7/glibc/glibc-2.17-55.el7``.
 
 Preparing environment
 ~~~~~~~~~~~~~~~~~~~~~
 
-First, we need the exactly the versions of tools and libs. Let's build a
-docker_ image and container for that:
+First, we need the exact versions of tools and libs. Let's build a
+Docker_ image and a container for it:
 
 .. code:: console
 
@@ -172,12 +187,13 @@ Build the ``libcare`` tools:
 
 .. code:: console
 
-        [root@... /]# make -C /libcare/src clean all
+        [root@... /]# make -C /libcare/src clean all && make -C /libcare/execve
         ...
 
 Now build and run the sample GHOST app that runs 16 threads to constantly check
-whether the ``glibc`` is vulnerable to GHOST_ and prints a dot every time it founds
-it still is:
+whether the ``glibc`` is vulnerable to GHOST_ and prints a dot every time it
+detects a buffer overflow in the ``gethostbyname_r`` function.
+The downgraded ``glibc`` is vulnerable:
 
 .. code:: console
 
@@ -187,18 +203,18 @@ it still is:
         [root@... ghost]# ./GHOST
         ............^C
 
-Press Ctrl-C to get your console back and let's start building the patch for
+Press Ctrl+C to get your console back and let's start building the patch for
 ``glibc``.
 
-Building the patch
-~~~~~~~~~~~~~~~~~~
+Building and applying the patch
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The build is done in two stages.
 
 First, the original package build is repeated with all the `intermediate
 assembly files`_ stored and saved for later. This greatly helps to speed up
 builds against the same base code. Run the following from inside our docker
-container to prebuild ``glibc`` package:
+container to pre-build ``glibc`` package:
 
 .. code:: console
 
@@ -207,7 +223,7 @@ container to prebuild ``glibc`` package:
         ...
 
 This should download the package, do a regular RPM build with ``kpatch_cc``
-wrapper substituted for GCC and store the pre-built data into archive under
+wrapper substituted for GCC and store the pre-built data into the archive under
 ``/kcdata`` directory:
 
 .. code:: console
@@ -215,7 +231,7 @@ wrapper substituted for GCC and store the pre-built data into archive under
         [root@... /libcare]# ls /kcdata
         build.orig-glibc-2.17-55.el7.x86_64.rpm.tgz  glibc-2.17-55.el7.src.rpm
 
-Now let's build the patch, output will be verbose since it contains tests run
+Now let's build the patch, the output will be verbose since it contains tests run
 by the ``kp_patch_test`` defined in ``packages/rhel7/glibc/glibc-2.17-55.el7/info``:
 
 .. code:: console
@@ -225,7 +241,7 @@ by the ``kp_patch_test`` defined in ``packages/rhel7/glibc/glibc-2.17-55.el7/inf
         [root@... /libcare]# ls /kcdata/kpatch*
         /kcdata/kpatch-glibc-2.17-55.el7.x86_64.tgz
 
-Unwrap build patches and run the GHOST_ sample:
+Unwrap patches and run the GHOST_ sample:
 
 .. code:: console
 
@@ -234,8 +250,8 @@ Unwrap build patches and run the GHOST_ sample:
         [root@... /kcdata]# /libcare/samples/ghost/GHOST 2>/dev/null &
         [root@... /kcdata]# patient_pid=$!
 
-And, finally, patch it. All the threads of sample should stop when the GHOST
-vulnerability is finally patched:
+And, finally, patch it. All the threads of the sample must stop when the GHOST
+vulnerability is patched:
 
 .. code:: console
 
@@ -270,12 +286,13 @@ Installation and dependencies
 =============================
 
 .. _`installation`:
+.. _`installation guide`:
 
-All the Linux-distros with ``libunwind``, ``elfutils`` and ``binutils``
-packages available are supported.
+All the Linux-distros with available ``libunwind``, ``elfutils`` and ``binutils``
+packages are supported.
 
-However, the ``libcare`` was only tested on Ubuntu from 12.04 to 16.04 and on
-CentOS from 6.0 to 7.3.
+However, the ``libcare`` is only tested on Ubuntu from 12.04 to 16.04 and on
+CentOS from 6.8 to 7.3.
 
 Dependencies
 ------------
@@ -295,7 +312,7 @@ To install the dependencies on Debian/Ubuntu do the following:
 Building ``libcare``
 --------------------
 
-To build ``libcare`` simply emit at project's root dir:
+To build ``libcare`` emit at project's root dir:
 
 .. code:: console
 
@@ -305,7 +322,7 @@ To build ``libcare`` simply emit at project's root dir:
 This should build all the utilities required to produce a patch out of some
 project's source code.
 
-It is highly advised to run the tests as well, enabling Doctor ``kpatch_user`` to
+It is highly recommended to run the tests as well, enabling Doctor ``kpatch_user`` to
 attach ``ptrace``\ cles to any of the processes first:
 
 .. code:: console
@@ -322,10 +339,11 @@ Overview
 ========
 
 First, we `prepare project patch`_ by
-`examining the differences in assembler files`_ generated during original
-and patched source code build. Finally, users invoke the ``kpatch_user`` that
-`applies the patches`_ which is a lot like loading
-a shared object (library) into other process memory.
+`examining the differences in assembler files`_ generated during the original
+and the patched source code build. Finally, users invoke the ``kpatch_user`` that
+`applies the patches`_. This is a lot like loading a shared object (library)
+into other process memory and then changing original code to unconditionally
+jump to the new version of the code.
 
 .. _`prepare project patch`: `Patch preparation`_
 .. _`applies the patches`: `Doctor kpatch_user`_
@@ -339,9 +357,9 @@ a shared object (library) into other process memory.
 Patch preparation
 -----------------
 
-Binary patches are build from augmented assembly files. Augmented files made
-via ``kpatch_gensrc`` that notes difference in assembly files produced from
-original and patched source code.
+Binary patches are built from augmented assembly files. Augmented files are
+made via ``kpatch_gensrc`` which notes the difference in assembly files
+produced from the original and the patched source code.
 
 This is done in two steps, both are described detailed in `Manual Patch
 Creation`_.
@@ -351,26 +369,27 @@ Building originals
 
 .. _kpatch_cc:
 
-First, the original code is built as is either via make or via packaging
-system. The build is done with compiler substituted to ``kpatch_cc`` wrapper.
-Wrapper's behaviour is configured via environment variables.
+First, the original code is built as is either by invoking ``make`` directly or
+by the packaging system. The build is done with compiler substituted to
+``kpatch_cc`` wrapper. Wrapper's behaviour is configured via environment
+variables.
 
 .. _`intermediate assembly files`:
 
 When ``kpatch_cc`` is invoked with ``KPATCH_STAGE=original`` it simply builds
-the project while keeping intermediate assembly files under name
-``.kpatch_${filename}.original.s`` invoking real compiler twice: first with the
+the project while keeping intermediate assembly files under the name
+``.kpatch_${filename}.original.s`` invoking the real compiler twice: first with the
 ``-S`` flag to produce the assembly files from the original code and then with
 the ``-c`` flag to produce object files out of these intermediate assembly
 files.
 
-Project binaries build during ``original`` stage are stashed and later used in
-patch preparation. When building patches for a package from distribution the
-objects built during ``original`` stage must be compatible with these from the
+Project binaries built during the ``original`` stage are stashed and later used in
+the patch preparation. When building patches for a package from distribution the
+objects built during ``original`` stage must be compatible with those from the
 distro's binary package.
 
-Assembly files resulting from correct ``original`` build can be stored to speed
-up things later on.
+Assembly files resulting from the correct ``original`` build can be stored to speed
+up patch builds later on.
 
 Building patches
 ~~~~~~~~~~~~~~~~
@@ -385,11 +404,11 @@ for the patched version, which is stored under file name
 compares original and patched files and produces a patch-containing assembly
 where all the changes in the code are put in the ``.kpatch``-prefixed sections
 while original code is left as is.  This assembly is finally compiled to a
-patch-containing object files by calling compiler with the ``-c`` flag.
+patch-containing object file by calling compiler with the ``-c`` flag.
 
-Linking done by the project's build system carries these sections to the target
+Linking done by the project build system carries these sections to the target
 binary and shared object files. During the link stage ``kpatch_cc`` adds ``ld``
-argument ``-q`` that instructs linker it to keep information about all the
+argument ``-q`` that instructs linker to keep information about all the
 relocations. This is required for the `Patch application`_ to (dynamically)
 link patch into running binary.
 
@@ -405,13 +424,13 @@ details.
 Project patch building
 ----------------------
 
-The above algorithm is implemented in two various helper scripts. First is
+The above algorithm is implemented in two various helper scripts. The first is
 ``kpmake`` that can build patches for any project buildable via ``make`` and
-second aims at building patches for applicaions and libraries coming from
-distribution packages ``scripts/buildpkgpatch``.
+the second aims at building patches for applications and libraries coming from
+distribution packages ``scripts/pkgbuild``.
 
-Both are using kpatch_cc_ wrapper described below. It is adviced to go through
-`Manual Patch Creation`_ at least once.
+Both are using kpatch_cc_ wrapper described below. It is recommended to go
+through `Manual Patch Creation`_ at least once.
 
 Using ``kpmake``
 ~~~~~~~~~~~~~~~~
@@ -421,26 +440,24 @@ Using ``kpmake``
 The ``kpmake`` script can be used to build patches for a project built locally
 via ``./configure && make && make install``.
 
-Usage is simple, just call ``kpmake`` with a list of source patches as
+The usage is simple, just call ``kpmake`` with a list of source patches as
 arguments and ``kpmake`` will build the binary patches and store them to
 ``patchroot`` directory.
 
-For the ``kpmake`` to work the build system must meet the following
-simple criteria:
+``kpmake`` requires the following simple criteria to be met on the build system:
 
 1. The default target SHOULD be the one that builds all the files in
-   project. This is by default the ``all`` target in most of the
-   projects.
+   the project. This is by default the ``all`` target in most of the projects.
 
-2. The ``install`` target MUST install the project's deliverativites
+2. The ``install`` target MUST install the project deliverativites
    into the directory specified as ``DESTDIR`` environment variable.
-   This is default for most of the projects. Other projects are either
-   patched by distributions to include that target or have it with a
+   This is default for most projects. Other projects are either
+   patched by distributions to include that target or have it under a
    different environment variable.
 
 3. The ``clean`` target SHOULD be the one that cleans the project.
 
-The typical usage is the following, for the ``configure``\ ble project:
+The typical usage is the following for the ``configur``\ able project:
 
 .. code:: console
 
@@ -467,8 +484,7 @@ Available options are:
 
 --help, -h              display a short help,
 
---update                just update the ``kpatches``. Useful when working on the kpatch tools
-                        themself,
+--update                just update the ``kpatches``. Useful when working on the kpatch tools,
 
 --clean                 invoke ``make clean`` before building,
 
@@ -483,33 +499,33 @@ Building patch for a package via ``scripts/pkgbuild``
 .. _`scripts/pkgbuild`:
 
 The ``scripts/pkgbuild`` is responsible for the building of the patch
-and prebuilding the original package and assembly files. At the moment
-it only supports building of the RPM-based packages.
+and pre-building the original package and assembly files. At the moment
+it only supports the building of the RPM-based packages.
 
-Each package has it's own directory ``packages/$distro/$package`` with
+Each package has its own directory ``packages/$distro/$package`` with
 different package versions as subdirectories. For instance, the directory
-``pacakges/rhel7/glibc/`` contains subdirectory ``glibc-2.17-55.el7`` that has the
+``packages/rhel7/glibc/`` contains subdirectory ``glibc-2.17-55.el7`` that has the
 configuration and scripts for building and testing of the sample security
-patches for that vesion of ``glibc`` package for RHEL7.
+patches for that version of ``glibc`` package for RHEL7.
 
 The project directory contains three main files:
 
-#. Shell-sourcable ``info`` that has necessary environment variables
+#. Shell-sourceable ``info`` that has the necessary environment variables
    specified along with the hooks that can alter package just before
-   build and test patch before it is packed. For instance,
+   the build and test patch before it is packed. For instance,
    ``packages/rhel7/glibc/glibc-2.17-55.el7/info`` contains both hooks and a
    ``kp_patch_test`` function that runs glibc test suite with each invocation
    being patched with the built patch.
 
-#. List of the patches to be applicable named ``plist``. File names are
+#. The list ``plist`` of the patches to be applied. File names are
    relative to the top-level directory ``patches``.
 
 #. YAML file ``properties.yaml`` containing version-specific
-   configuration such as URLs for pre-build storage, original source
-   packages URL and Docker container images with toolchain
-   (GCC/binutils) version required to properly build the package.
+   configuration, such as URLs for pre-build storage, original source
+   packages URL, and Docker container images with toolchain
+   (GCC/binutils) version is required to properly build the package.
 
-   This is not used at the moment and left as information source for the users.
+   This is not used at the moment and left as an information source for the users.
 
 The Doctor: ``kpatch_user``
 ---------------------------
@@ -517,35 +533,35 @@ The Doctor: ``kpatch_user``
 .. _`doctor kpatch_user`:
 
 All the job is done by the ``kpatch_user``. It is called ``doctor`` hereafter
-and targets of operations are thus called ``patients``.
+and the targets of operations are thus called ``patients``.
 
-The doctor accepts a few arguments that are common to all types of operations:
+The doctor accepts a few arguments that are common for all types of operations:
 
 -v      enable verbose output
 -h      show commands list
 
 Applying patches via ``patch``
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. _`Patch application`:
 .. _`kpatch_user`:
 
-The ``patch`` mode patches a process with id given as
-argument to ``-p`` option or all of them except self and ``init`` when
-argument is ``all``. The patch (or directory with patches) to be applied
-should be specified as the only positional argument:
+The ``patch`` mode patches a process with ID given as an argument to ``-p`` option
+or all of them except self and ``init`` when the argument is ``all``. The patch
+(or directory with patches) to be applied should be specified as the only
+positional argument:
 
 .. code:: console
 
  $ kpatch_user patch -p <PID_or_all> some_patch_file.kpatch
 
-Patches are basically ELF files of relocatable type ``REL`` with binary
-metainformation such as BuildID and name of the patch target prepended.
+The patches are basically ELF files of relocatable type ``REL`` with binary
+meta-information such as BuildID and name of the patch target prepended.
 Loading patches is thus a lot like loading a shared object (library)
-into process. Except we are puppeting it by strings going through a
-keyhole in other process's memory.
+into a process. Except we are puppeting it by strings going through a
+keyhole in other process' memory.
 
-First the memory near the original object is allocated, next all the
+First, the memory near the original object is allocated, then all the
 relocations and symbols are resolved in a local copy of patch content. This
 pre-baked patch is copied to the patient's memory and, finally, original
 functions are overwritten with the unconditional jumps to the patched version.
@@ -555,28 +571,28 @@ For more details look at the chapter `Patching`_.
 Cancelling patches via ``unpatch``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The ``unpatch`` mode makes doctor remove patches listed by target's
-BuildID from the memory of patients. It simply restores original code of the
-patched functions from a stash and puppets patients to ``munmap``\ s the memory
-areas used by patches.
+The ``unpatch`` mode makes doctor remove patches listed by target BuildID from
+the patients' memory. It simply restores the original code of the patched
+functions from a stash allocated along with the patch and puppets patients to
+``munmap`` the memory areas used by patches.
 
 Showing info via ``info``
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Last entry to the ``kpatch_user`` is the ``info`` command that lists all
-the objects and their BuildIDs for set of the processes requested. Its
-primarily use is as the utility for the book-keeping software.
+The last entry to the ``kpatch_user`` is the ``info`` command that lists all
+the objects and their BuildIDs for the set of the processes requested. Its
+primary use is as the utility for the book-keeping software.
 
 Patchlevel support
 ~~~~~~~~~~~~~~~~~~
 
 .. _patchlevel:
 
-Since patches to object such as libraries can be updated there is a way to
-distinguish between them, called ``patchlevel``. This information is parsed
-from the layout of the directory where the patches are stored. If during
-patching stage patch with a bigger ``patchlevel`` is found the old one is
-removed and new one is applied.
+Since patches to the objects such as libraries can be updated, there is a way to
+distinguish them, called ``patchlevel``. This information is parsed
+from the layout of the directory where the patches are stored. If on
+patching stage a patch with a bigger ``patchlevel`` is found, the old one is
+removed and the new one is applied.
 
 Where To Start Hacking
 ======================
@@ -596,7 +612,7 @@ The root directory contains project-level makefile. Run:
 
     $ make
 
-here and enjoy libcare being deployed on your machine.
+and enjoy libcare being deployed on your machine.
 
 After that run tests by simply emitting:
 
@@ -619,7 +635,7 @@ The following is the project subdirectories:
 1. `tests`_ contains all the tests for the project and should be used as a
    sample for building the ``kpatch``\ es.
 
-2. `binfmt`_ contians kcare-user specific implementation of the binary file
+2. `binfmt`_ contains kcare-user specific implementation of the binary file
    format that overrides kernel's ``elf_format`` and notifies about start-up of
    the binaries listed using ``/proc/ucare/applist``.
 
@@ -628,11 +644,10 @@ Test infrastructure ``./tests``
 
 .. _tests:
 
-This directory contains tests and the infrastructure necessary to run
-them. To keep the ``tests`` directory clean each test is placed in its
-own directory.
+This directory contains the tests and the infrastructure to run them. To keep
+the ``tests`` directory clean, each test is placed in its own directory.
 
-To run tests simply emit:
+To run the tests emit:
 
 ::
 
@@ -643,17 +658,17 @@ and all flavors of the ``kpatch_user`` usage.
 
 There are two types of test builds.
 
-First one is the regular build done
+The first one is the regular build done
 by manually emitting assembler files for both original and patched
-source files and then applying ``kpatch_gensrc`` to them and compiling
-the result into a kpatch-containing object where from it is extracted by the
-utils, as described in section `Manual Patch Creation`_.
+source files, and then applying ``kpatch_gensrc`` to them and compiling
+the result into a kpatch-containing object where from it was extracted from by the
+utils, as described in `Manual Patch Creation`_ section.
 
-Second one is the build done by the ``kpmake`` tool which uses ``kpatch_cc``
-compiler wrapper as described `kpmake`_. The build results for
-each build type are put into their own subfolder of a test directory.
+The second one is the build done by the ``kpmake`` tool which uses ``kpatch_cc``
+compiler wrapper, as described in `kpmake`_ section. The build results for
+each build type are placed in their own subfolder ina test directory.
 
-A test can be build with the particular build type using either ``make
+A test can be built with the particular build type using either ``make
 build-$test`` or ``make kpmake-$test`` commands.
 
 Sometimes it is necessary to debug a particular test so all changes MUST
@@ -661,8 +676,8 @@ retain the ability to run the tests manually. The manual run is done by
 executing an appropriate binary (with the ``LD_LIBRARY_PATH`` set as
 needed) and target ``kpatch_user patch`` at its process.
 
-However, it is advised to run tests by the ``./run_tests.sh`` script
-present in the ``tests`` directory.
+However, it is recommended to run tests by the ``./run_tests.sh`` script,
+available in the ``tests`` directory.
 
 The ``run_tests.sh`` script accepts the following options:
 
@@ -679,17 +694,17 @@ The ``run_tests.sh`` script accepts the following options:
 -v
   be verbose
 
-The only argument it accepts is a string with white-space separated names of
-tests to execute. Default is to execute all the tests discovered.
+The only argument it accepts is a string with space separated names of
+tests to execute. The default is to execute all the tests discovered.
 
 Test flavors
 ^^^^^^^^^^^^
 
-There are following test flavors. Most of the tests are executed in all
-flavors, that depends on what ``should_skip`` function of ``run_tests.sh``
-returns. Some tests have different success criteria between different flavors:
-e.g.  ``fail_*`` tests check that binary is patched upon execution when run
-with ``test_patch_startup``.
+There are the following test flavors. Most of the tests are executed in all
+flavors, it depends on what ``should_skip`` function of ``run_tests.sh``
+returns. Some of the tests have different success criteria between different
+flavors: e.g.  ``fail_*`` tests check that binary is succesfully patched upon
+execution with ``test_patch_startup`` flavor.
 
 The flavors are:
 
@@ -709,18 +724,18 @@ The flavors are:
 
 ``test_patch_patchlevel``
      that checks that patchlevel_ code works as expected. This applies two
-     patches with different patchlevels to the ``patchlevel`` test and checks
+     patches with different patch levels to the ``patchlevel`` test and checks
      that the patching is done to the latest one.
 
 Adding or fixing a test
 ^^^^^^^^^^^^^^^^^^^^^^^
 
 Each test has its own directory that MUST have the file named ``desc``
-which contains one-line description of the test. The ``desc`` files are
+which contains a one-line description of the test. The ``desc`` files are
 used to discover the tests.
 
 The makefile inside the test directory MUST compile the code into a
-binary. Binary name MUST coincide with the directory and test name, the
+binary. The binary name MUST coincide with the directory and test name, the
 library name (if present) must be equal to ``lib$test.so``. The source
 code is typically called ``$test.c`` for the binary and ``lib$test.c``
 for the library. Patch files are ``$test.diff`` and ``lib$test.diff``.
@@ -733,16 +748,16 @@ The ``tests/makefile.inc`` file itself includes either
 ``makefile-kpmake.inc`` file when the ``CC`` variable equals ``kpatch_cc`` or
 ``makefile-patch.inc`` otherwise. The former provides a set of rules that meet
 ``kpmake``\ s criteria described in `kpmake`_.  The later provides a set of
-rules described `Manual Patch Creation`_, except for the libraries output that
-are broken with them and require including of a makefile
+rules described in `Manual Patch Creation`_, except for the libraries output that
+is broken with them and requires including of a makefile
 ``makefile-patch-link.inc`` that links the shared library to extract proper
 names of the sections for the kpatch.  For the usage example take a look at the
-``both`` test that tests patching of both binary and a library it loads.
+test ``both`` that tests patching of both binary and a library it loads.
 
 ``fastsleep.so``
 ^^^^^^^^^^^^^^^^
 
-To speed-up test execution while allowing them to be run manually we had to
+To speed up test execution while allowing them to be run manually we had to
 adjust tests with a ``LD_PRELOAD``\ ed library that redefines ``sleep`` and
 ``nanosleep`` to change their arguments so the code sleeps faster. The code is
 in the file ``fastsleep.c``.
@@ -759,32 +774,32 @@ have a patch for.
 
 This is implemented by a kernel module that inserts a handler for binary
 file format ``binfmt`` overriding the default one for the ELF file. The
-task of this ``binfmt`` is just to wrap the original functions provided
-by kernel and check whether the path of an executed binary is listed.
+task of the ``binfmt`` is just to wrap the original functions provided
+by the kernel and check whether the path of an executed binary is listed.
 
-When it is the subscribed userspace application is notified by the
-Generic Netlink channel implemented by the kernel module. Sample
+When it is the subscribed userspace, an application is notified by the
+Generic Netlink channel implemented by the kernel module. The sample
 application ``kcare_genl_sink`` provides an example on how to implement
-a userspace counterpart for the channel. It is also used for testing.
+userspace counterpart for the channel. It is also used for testing.
 
 The main module function is the ``do_intercept_load`` in the file
 ``binfmt.c``.
 
 It checks if the path of an application being executed is listed in the file
-``/proc/ucare/applist`` and since the execution should be intercepted. This
+``/proc/ucare/applist`` and therefore the execution should be intercepted. This
 list should contain **real** file paths without double slashes, ``.`` or
 ``..``.
 
-To add an application write its path to the ``/proc/ucare/applist`` file.
-Multiple paths can be added at once separated by newline character. To remove a
-path write it with the minus sign prefixed. To clear the list write magic
-``-*`` to it.
+To add an application write its path to ``/proc/ucare/applist`` file.  Multiple
+paths can be added at once, separated by a newline character. To remove a path,
+write it with the minus sign prefixed. To clear the list write magic ``-*`` to
+it.
 
-If the execution should be intercepted as told by the aforemetioned
-call, the ``binfmt`` module tries to notify about the new process via
-that sends the message to the subscribed process, if any.
-If there is no one listening at the other side the code just leaves
-binary as is, continuing its normal execution. Otherwise, we enter an
+If an execution needed to be intercepted as told by the aforementioned
+call, the ``binfmt`` module tries to notify about the new process by
+sending a message to the subscribed process, if any.
+If there is no one listening on the other side, the code just leaves
+the binary as is, continuing its normal execution. Otherwise, we enter an
 infinite loop waiting for the signal ``SIGSTOP`` to come, blocking all
 the other signals, **including** ``SIGKILL`` and ``SIGSEGV``. The
 ``doctor`` code executed by the subscribed application such as
@@ -807,13 +822,13 @@ The following files are updated as a part of the project:
    `libelf <https://directory.fsf.org/wiki/Libelf>`__.
 3. ``src/kpatch_ptrace.c`` implements
    `ptrace(2) <http://man7.org/linux/man-pages/man2/ptrace.2.html>`__
-   functions such as reading/writing patients memory, executing code on
-   the behalf of patient (e.g. syscalls), and parsing the patients
+   functions such as reading/writing patient's memory, executing code on
+   the behalf of patient (e.g. syscalls), and parsing the patient's
    auxiliary vector to determine real entry point of the application.
-4. ``src/kpatch_strip.c`` contains two mode of operation:
-   ``--strip`` that removes all non-kpatch sections from the ELF file
+4. ``src/kpatch_strip.c`` contains two modes of operation:
+   ``--strip`` that removes all non-kpatch sections from the ELF file,
    and ``--undo-link`` that redoes binary image offsets into section
-   offsets for symbols, relocations' offsets and addends and resets
+   offsets for symbols, relocations' offsets, and addends and resets
    section addresses to zero, converting an ELF object to ``REL`` type.
 5. ``src/kpatch_gensrc.c`` is the powerhorse of patching. It compares original
    versus patched assembly files and produces an assembly file with all the
@@ -821,8 +836,9 @@ The following files are updated as a part of the project:
 
    The code is changed so all the variable access is done through the Global
    Offset Table entries referenced via PC-relative instructions (option
-   ``--force-gotpcrel``). The ``jump table`` generated by the ``kpatch_user.c``
-   code and filled with ``kpatch_elf.c`` code. See below for details.
+   ``--force-gotpcrel``). The ``jump table`` is generated by the
+   ``kpatch_user.c`` code and filled with ``kpatch_elf.c`` code. See below for
+   details.
 
 .. Vagrant-based CI and developer machines
    ---------------------------------------
@@ -883,12 +899,12 @@ Short Introduction to ELF
 
 Most of the binaries in the system are in the `elf(5)
 format <http://refspecs.linuxbase.org/elf/elf.pdf>`__. From the producer
-point of view the file of that format consists of a set of blocks called
+point of view, the file of this format consists of a set of blocks called
 ``sections``. Sections can contain data (``.rodata``, ``.data``),
 executable code (usually called ``.text``) and auxiliary data. The text
-references its parts and necessary data (such as variables) by the means
+references its parts and necessary data (such as variables) by means
 of ``symbols``. For instance, C's ``main`` is a special symbol where the
-control is transfered by the C runtime after the required initalization
+control is transferred by the C runtime after the required initialization
 is done. The symbols are listed in the section ``.symtab`` whenever it
 is required.
 
@@ -900,42 +916,41 @@ object, used primarily to store common code in libraries; the binary
 assembler).
 
 These differ mostly by the types of relocations they may and do contain.
-Relocations are the technique used to allow for address changes in the
-binary object files. For instance, when linking a set of ``.o`` files
-into an executable, the linker merges sections from them into a single
-section such as ``.text``, ``.data`` or ``.rodata``. The linker adjusts
-relocation's info such as place where it should be applied (called
-``r_offset``), target symbol and its address and/or addend relative to
-the symbol value (called ``r_addend``). Some types of relocations also
-allowed in the final binary object and are resolved upon load by the
-dynamic linker.
+Relocations are the technique used to allow address changes in the binary
+object files. For instance, when linking a set of ``.o`` files into executable,
+the linker merges sections from them into a single section such as ``.text``,
+``.data`` or ``.rodata``. The linker then adjusts relocation info such as the
+place where it should be applied (called ``r_offset``), target symbol and its
+address and/or addend relative to the symbol value (called ``r_addend``). Some
+types of relocations are also allowed in the final binary object and are
+resolved upon load by the dynamic linker.
 
 The ``DYN``\ amic object contains all the data necessary to load the
 library on a random base address. This randomization of the base leads
 to randomization of the library functions addresses, making it harder
 for an intruder to exploit a vulnerability, and allowing multiple
 libraries to be loaded without interfering each other. Because it
-is impossible to know address of a variable at the compile time the
+is impossible to know the address of a variable at the compile time the
 ``DYN``\ amic code refers to its data objects using so-called Global
 Offset Table (GOT). This table contains addresses of the variables, so
 accessing a variable takes two steps: first loading the GOT entry, then
 unreferencing it. GOT entry is usually referenced in the
-instruction-pointer relative manner. The GOT is filled by the dynamic
+instruction pointer relative manner. The GOT is filled by the dynamic
 linker such as ``ld-linux`` while resolving relocations from the
-``.rela.dyn``. Only few types of relocations are allowed there, these
+``.rela.dyn``. Only a few types of relocations are allowed there, they
 are (for x86-64): ``R_X86_64_RELATIVE``, ``R_X86_64_64`` and
 ``R_X86_64_GLOB_DATA``. The symbols provided by the ``DYN``\ amic object
-are listed in the ``.dynsym`` section with names stored in the
+are listed in the ``.dynsym`` section with the names stored in the
 ``.dynstr`` section. Special section ``.dynamic`` contains all the data
 required to load an object, such as a list of required libraries,
 pointers to the relocation entries and so on.
 
-The ``EXEC``\ utable objects are usually fixed to the certain address
+The ``EXEC``\ utable objects are usually linked to a fixed address
 and contain no relocation information. The kernel only needs to know
 how to load this type of objects along with the interpreter if
 specified. Most of the binaries have the dynamic linker ``ld-linux``
 specified as the interpreter. It is loaded by the kernel and the control
-is transfered here. The dynamic loader's duty is to load all the necessary
+is transferred here. The dynamic loader duty is to load all the necessary
 libraries, resolve symbols and transfer the control to the application code.
 
 The ``REL``\ ocatable object file can contain any type of relocation.
@@ -943,21 +958,21 @@ The static linker, such as ``ld``, links these into an ``EXEC``\ utable file
 or a ``DYN``\ amic one. The ``REL`` object file is merely an assembler
 file turned into a binary file, with the symbol references noted as
 appropriately. That is, for every symbol reference in the assembler file
-there is corresponding symbol added to the ``REL``\ ocatable ELF file
+there is a corresponding symbol added to the ``REL``\ ocatable ELF file
 and the relocation referencing this symbol. For every symbol defined the
 corresponding symbol is added to the ``.symtab`` section. ASCII
 zero-ended string names are stored into the ``.strtab`` section. The
-static linker then resolves symbol referenced in one object files with
+static linker then resolves symbol referenced in one object file with
 the symbols defined in another object file or ``DYN``\ amic shared
 object file.
 
 Patching
 --------
 
-Here we are going to describe how the patching is done.
+Here we are going to describe how the patching is performed.
 
 This is the act that looks like a mix of static and dynamic linking in
-the process address space expect that we are doing it using ``ptrace``.
+the process address space expecting that we are doing it using ``ptrace``.
 There is infant task to reuse ``rtld``'s ``_dl_open`` calls to do the
 job for us.
 
@@ -968,23 +983,23 @@ Attaching
 ~~~~~~~~~
 
 When a user asks ``kpatch_user`` to patch a process with a given patch
-(or a directory with patches), patcher (let's call it ``doctor``) first
+(or a directory with patches), the patcher (let's call it ``doctor``) first
 attaches to the threads to be patched (let's call it ``patient``) thus
 stopping their execution.
 
 Execute Until Libraries Are Loaded
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Now, if we are about to patch a freshly executed binary, we had to
+Now, if we are about to patch a freshly executed binary, we have to
 continue its execution until all the libraries are loaded. That is, if
-the binary has non-zero ``interp``\ retator, such as ``ld-linux``, the
-kernel first executes the interpretor and it is interpretor's task to
+the binary has a non-zero ``interp``\ reter, such as ``ld-linux``, the
+kernel first executes the interpreter and it is the interpreter task to
 transfer control to the application text after all the initialization is
 successful. So, to ensure that all the libraries are loaded so we can
-use symbols provided by them in our patches, we had to wait until that
+use symbols provided by them in our patches, we have to wait until the
 initialization is done. We do this by inserting a ``TRAP`` instruction
 at the entry point of the application, so when the interpreter is done
-loading the libraries. We have to parse `auxiliary
+loading the libraries, we have to parse `auxiliary
 vector <http://articles.manugarg.com/aboutelfauxiliaryvectors>`__
 information to find the entry point. This is done in the
 ``kpatch_load_libraries`` function.
@@ -992,11 +1007,11 @@ information to find the entry point. This is done in the
 Examine Application Object Files
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Next step is to find out what ELF objects are loaded and where. This way
+The next step is to find out what ELF objects are loaded and where. This way
 we know offsets for reach dynamically-loaded library and can actually
 resolve symbols from there. This is done by the function
-``kpatch_create_object_files``. For the correct mapping of the object's
-symbol addresses to the virtual address space we had to parse the
+``kpatch_create_object_files``. For the correct mapping of the object
+symbol addresses to the virtual address space we have to parse the
 instructions on how to load the object stored in the
 ``program header``\ s part of the ELF, and are used by the dynamic
 loader or the kernel. This part is done by the function
@@ -1027,11 +1042,11 @@ jump table for the function references which is reused as GOT for the
 symbol reference. It is also used as the Thread Pointer Offset table for
 the TLS data.
 
-So, first we need to count if there is need for the jump table at all.
+So, the first we need to count if there is a need for the jump table at all.
 For that, we do count undefined and TLS symbols and allocate the jump
 table if there are any of them.
 
-Next we need to find a region in the patient address space suitable to
+The next we need to find a region in the patient address space suitable to
 mmap the patch here. We start to look for the hole after the object and
 check if there is enough space to fit the patch, looking farther upon
 failure. This is done by the ``kpatch_find_patch_region`` function.
@@ -1041,7 +1056,7 @@ behalf using the code injected by ``ptrace``. This is done by the
 ``kpatch_mmap_remote`` function that executes a ``mmap`` syscall
 remotely.
 
-Once we got the address of the region and allocated memory there we are
+Once we got the address of the region and allocated memory there, we are
 all prepared to resolve the relocations from the kpatch.
 
 Applying Relocations
@@ -1050,11 +1065,11 @@ Applying Relocations
 Resolving symbols
 ^^^^^^^^^^^^^^^^^
 
-Since relocations are made against symbols we had first to resolve
+Since relocations are made against symbols we have first to resolve
 symbols. This is done by the function ``kpatch_resolve`` present in the
 ``kpatch_elf.c`` file.
 
-First, we resolve sections' address first. We know the address of the
+We resolve sections addresses first. We know the address of the
 region we allocated for the ``kpatch``, so we can calculate the
 ``kpatch``'s sections addresses. Other sections' addresses are resolved
 from the original object file we are about to patch.
@@ -1070,32 +1085,31 @@ by two different relocations, one that gets offset from a GOT
 (``TPOFF{32,64}``). We use symbol field ``st_size`` to store the
 original offset and ``st_value`` to store the offset in the jump table.
 
-Objects of unknown type ``STT_NOTYPE`` are resolved via jump table. If
-it is later discovered that they are referenced by a relocation as a
+Objects of unknown type ``STT_NOTYPE`` are resolved via the jump table. If it
+is later discovered that they are referenced by a relocation as a
 Global Offset Table entry such as ``GOTPCREL`` then only the address
 value from the jump table is used.
 
-Rest of the symbol types are unsupported. Appearence of the unsupported
-type will cause ``doctor`` to fail.
+Rest of the symbol types are unsupported. The appearence of the unsupported
+symbol type will cause the ``doctor`` to fail.
 
 Doing relocations
 ^^^^^^^^^^^^^^^^^
 
-Now that we are all set we resolve the relocations. This is done by the
+Now that we are all set, we resolve the relocations. This is done by the
 function ``kpatch_relocate`` that calls ``kpatch_apply_relocate_add``
 for all the sections of type ``SHT_RELA``.
 
-The code is pretty straightforward except for two relocations. First one
-is the ``TPOFF{32,64}`` relocations that do restore offset saved in
-``st_size``. Another one is Global Offset Table-related relocations such
-as ``GOTTPOFF``, ``GOTPCREL`` and Ubuntu Xenial specific
-``REX_GOTPCRELX``. If the referenced symbol has type ``STT_NOTYPE`` or
-``STT_TLS`` then the jump table entry reused as the Global Offset Table
-entry. If the relocation aims for either original object's section or
-patch's section then we convert the ``mov`` instruction present to the
-``lea`` instruction as there is no appropriate jump table entry which is
-not required in that case since the target section is closer than 2GiB
-(we allocate the memory for patch that way).
+The code is pretty straightforward except for two relocations. The first one is
+the ``TPOFF{32,64}`` relocations that do restore offset saved in ``st_size``.
+Another one is Global Offset Table-related relocations such as ``GOTTPOFF``,
+``GOTPCREL``, and Ubuntu Xenial specific ``REX_GOTPCRELX``. If the referenced
+symbol has type ``STT_NOTYPE`` or ``STT_TLS``, then the jump table entry is
+reused as the Global Offset Table entry. If the relocation aims for either
+original object or patch section, then we convert the ``mov``
+instruction present to the ``lea`` instruction as there is no appropriate jump
+table entry which is not required in that case since the target section is
+closer than 2GiB (we allocate the memory for the patch that way).
 
 Doctor injects the patch
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1106,8 +1120,8 @@ allocated region of patient's memory.
 But we are not yet done with the patching of the patient. We now have to
 reroute the execution paths from the old buggy functions into our just
 loaded new shiny ones. But it is dangerous to patch functions that are
-being executed at the moment, since this can change the way data is
-structured and corrupt everything. So, we had to wait until the patient
+being executed at the moment, since this can change the way the data is
+structured and corrupt everything. So, we have to wait until the patient
 leaves functions we are about to patch.
 
 This is done by the function ``kpatch_ensure_safety`` which checks that
@@ -1115,7 +1129,7 @@ there is no patched symbols on the stack and, if there is any, waits for
 the patient to hit breakpoints placed at their returns. The function
 uses ``libunwind`` function with pluggable unwinder interfaces.
 
-If we succesfully ensured safety of the patching we begin the patching
+If we ensured the patching safety, we start the patching
 itself. For that the entry point of the original functions are rewritten
 with the unconditional jumps to the patched functions. This is done by
 the function ``kpatch_apply_hunk`` called for each of the original
@@ -1124,18 +1138,18 @@ functions that do have patched one.
 Doctor exits
 ~~~~~~~~~~~~
 
-At this point doctor did his job, frees resources and leaves. If
-anything bad happen during any of the actions the appropriate error MUST
-be printed.
+At this point doctor done with his job, it frees resources and leaves. If
+anything wrong happens during any of the actions the appropriate error MUST be
+printed.
 
 Manual Patch Creation
 ---------------------
 
-.. _`build under the hood`:
+.. _`built under the hood`:
 .. _`examining the differences in assembler files`:
 
-Throughout this section availability of the kpatch tools are assumed. To
-build them and add them into PATH do:
+Throughout this section the availability of the kpatch tools is assumed. To
+build them and add them into PATH, do:
 
 .. code:: console
 
@@ -1145,15 +1159,15 @@ build them and add them into PATH do:
 Generating the kpatch assembler with ``kpatch_gensrc``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-So, the main working horse for the whole project, including kernel
-patches, is the ``kpatch_gensrc`` utility. It compares two assembler
-files and whenever there are differences in the code of a particular
-function it emits a new code after original one but with a name suffixed
-with ``.kpatch`` and in the ``.kpatch.text`` section. Keeping the
-original code maintains all the data and references in the original
-order. All new variables are being put into ``.kpatch.data`` section.
+So, the main working horse for the whole project, including kernel patches, is
+the ``kpatch_gensrc`` utility. It compares two assembler files and whenever
+there are differences in the code of a particular function, it emits a new code
+after the original one but with a name suffixed with ``.kpatch`` and in the
+``.kpatch.text`` section. Keeping the original code maintains all the data and
+references in the original order. All the new variables are being put into
+``.kpatch.data`` section.
 
-So, imagine you have two source code versions available, let's name them
+So, imagine that you have two source code versions available, let's name them
 ``foo`` for the original and ``bar`` for the patched version:
 
 
@@ -1357,7 +1371,7 @@ The result is:
         .section    .note.GNU-stack,"",@progbits
 
 A watchful reader have spotted two new sections: ``.kpatch.info`` and
-``.kpatch.strtab``. The former contains information about function being
+``.kpatch.strtab``. The former contains information about the function being
 patched and the patch itself, such as sizes of the functions. The
 compiler generates a relocation section ``.rela.kpatch.info`` against it
 that references symbols from both the original binary as patch targets
@@ -1414,7 +1428,7 @@ binary:
 
 The ``--strip`` mode of the ``kpatch_strip`` operation removes all the
 ``kpatch``-unrelated sections, setting their type to ``PROG_NOBITS`` and
-modifying section's offsets.
+modifying sections offsets.
 
 Fix up relocations
 ^^^^^^^^^^^^^^^^^^
@@ -1424,31 +1438,30 @@ of the original binary via relocations.
 
 These relocations are fixed by invoking ``kpatch_strip --rel-fixup`` as follows:
 
-#. All relocations of type ``PLT32`` are changed to the type ``PC32`` since
-   they are resolved via jump table.
+#. All relocations of type ``PLT32`` are changed to ``PC32`` since
+   they are resolved via the jump table.
 
-#. All the relocations internal to patch are left as is -- that is, if newly
-   introduced code references newly introduced function or data. The ``doctor``
-   will have enough information to resolve these.
+#. All the relocations internal to the patch are left as is -- that is, if
+   newly introduced code references newly introduced function or data. The
+   ``doctor`` will have enough information to resolve these.
 
 #. Some of these relocations are referencing original local symbols introduced
-   by compiler named like ``.LC0``. Relocations against each of this symbol are
-   replaced to relocation against section that contains it.
+   by compiler named like ``.LC0``. Each relocation referencing such a symbols
+   is replaced to relocation referencing section that contains them with an
+   updated ``r_addend``.
 
-#. Relocations against Thread Local Storage symbols are harder to handle,
+#. Relocations referencing Thread Local Storage symbols are harder to handle,
    mostly because of the variety of TLS models in use.
    
-   Relocations of type ``TPOFF32`` are generated in ``EXEC`` utable binaries for
+   Relocations of type ``TPOFF32`` are generated in ``EXEC``\ utable binaries for
    TLS symbols defined in application. We ensure that (negative) offset values
    into TLS block coincide between original and patched binaries.
 
    Relocations of type ``GOTTPOFF`` are generated when code references TLS
-   variable from another object, such as TLS variable ``__errno_location``
-   imported from ``glibc`` by using ``errno`` in C code, which is actually a
-   macro (due to ``errno`` being ``COPY_DATA``). These are tricky: code looks
-   for appropriate original ``GOT`` entry which is filled via ``TPOFF64``
-   relocation and writes the offset of this entry into the ``r_addend`` field
-   of ``GOTTPOFF`` relocation.
+   variable from another object. These are tricky: code looks for appropriate
+   original ``GOT`` entry which is filled via ``TPOFF64`` relocation and writes
+   the offset of this entry into the ``r_addend`` field of ``GOTTPOFF``
+   relocation.
 
    All the other TLS relocation types are not supported since there is no full
    TLS support yet.
@@ -1463,11 +1476,11 @@ Whenever assembly code of the patch references variable not coming from patch
 there are two options.
 
 First, the referenced variable can be defined in the original code that can be
-referenced as is since we allocate patches close to the oriignal code and the
+referenced as is since we allocate patches close to the original code and the
 32-bit PC-relative relocation should be enough.
 
-Second, the referenced non-TLS variable can be imported by the original code
-e.g. from ``glibc`` library. In that case the variable can be further than 2GiB
+Second, the referenced non-TLS variable can be imported by the original code,
+e.g. from ``glibc`` library. In that case, the variable can be further than 2GiB
 away from the patch code and it ought to have a way to address it in all the
 64-bit address space.
 
@@ -1499,7 +1512,7 @@ into one-stage
 
 changing relocation type from ``GOTPCREL`` to a simple ``PC32``. The
 ``kpatch_strip`` code ensures that this is always done for known symbols so
-there is no dependency on particular linker behaviour.
+there is no dependency on particular linker behavior.
 
 All the references to the variables imported by the original code are left with
 the ``GOTPCREL`` relocation and these are correctly resolved during the
@@ -1508,17 +1521,17 @@ patching, **except** for the variables ``COPY`` ed by the original binary.
 .. TODO resolve to ``COPY`` instead of original.
 
 
-Stripping information not required for relocation ``strip --strip-unneeded``
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Stripping extra information via ``strip --strip-unneeded``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Now that we have fixed ``kpatch``'s relocations we can finally strip all
+Now that we have fixed ``kpatch`` relocations we can finally strip all
 the unnecessary symbols with ``strip``:
  
 .. code:: console
 
     $ strip --strip-unneeded foobar.stripped
 
-This will remove these symbols that have no relocations targeted at
+This will remove the symbols that have no relocations targeted at
 them, so, most of the symbols, except for the sections, patched
 functions with ``.kpatch`` suffix and symbols referenced from
 the patch.
@@ -1526,12 +1539,12 @@ the patch.
 Undoing offsets ``kpatch_strip --undo-link``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Since the ``doctor`` does not care for program section and loads patch
+Since the ``doctor`` does not care for the program section and loads patch
 as a single bulk region without caring for the program header and
-sections virtual addresses and offsets the patch must be prepared
+sections virtual addresses and offsets in the patch must be prepared
 accordingly. That means we have to undo all the offsets and convert
 base-address relative values into section-relative values for the
-relocation's offsets (``r_offset``), symbols (``st_value``) and finally
+relocations offsets (``r_offset``), symbols (``st_value``) and finally
 reset the sections addresses to zeroes (``sh_addr``). This all is done
 by the ``--undo-link`` mode of ``kpatch_strip``:
 
@@ -1598,10 +1611,10 @@ Adding meta-information with ``kpatch_make``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Finally, we need to prepend the ``kpatch`` ELF object with
-metainformation doctor uses to check that the patch's target is correct.
+meta-information doctor uses to check that the patch target is correct.
 
-We do this using ``kpatch_make`` but first we need to know what is the
-name of the target object (``foo`` in our case) and what is it's
+We do this using ``kpatch_make``, but first we need to know what is the
+name of the target object (``foo`` in our case) and what is its
 BuildID, stored in ``.note.build-id`` section:
 
 .. code:: console
@@ -1634,10 +1647,10 @@ Now let's apply that:
 Conclusion
 ^^^^^^^^^^
 
-Congratulations, we are done with the simple patch! Was pretty complicated,
-was not it?
+Congratulations, we are done with the simple patch! It was pretty complicated,
+wasn't it?
 
-Building any real project following the recipe above is a nightmare, since it
+Building any real project following the recipe above is a nightmare since it
 requires interfering with the project's build system: changing all the
 compilation to go through intermediate assembly and ``kpatch_gensrc``.
 
