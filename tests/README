@@ -1,6 +1,0 @@
-This directory contains (simple) testing suite for the libcare.
-
-Each directory containing a file `desc` is considered to be a directory test
-and is build by the makesystem and run by the `run_tests.sh` script.
-
-For a detailed description read the documentation.
