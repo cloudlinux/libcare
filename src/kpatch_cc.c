@@ -247,7 +247,7 @@ static void init(int argc_, const char **argv_)
 	char *args;
 	int ninput = 0, i;
 	const char *realgccenv = "KPCCREAL";
-	char pathbuf[PATH_MAX];
+	static char pathbuf[PATH_MAX];
 
 	prog_name = argv_[0];
 
