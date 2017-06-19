@@ -41,7 +41,12 @@ makeable project. Just do:
         $ src/libcare-patch-make some_serious_bug.patch
 
 And find binary patches for all the deliverables of the project in the
-``patchroot`` directory.
+``patchroot`` directory. See our `simple server <samples/server/README.rst>`__
+for usage sample.
+
+For more details follow to the `patch preparation
+<docs/internals.rst#patch-preparation>`__ chapter of the `internals
+<docs/internals.rst>`__.
 
 .. _`libcare-patch-make`: docs/libcare-patch-make.rst
 
@@ -66,7 +71,7 @@ It is a lot like loading a shared library into another process' memory:
 Now the patient executes patched versions of the functions.
 
 For more details follow to the `Patching <docs/internals.rst#Patching>`__
-chapter of the internals.
+chapter of the `internals <docs/internals.rst>`__.
 
 Will my patches re-apply if I restart the process?
 --------------------------------------------------
