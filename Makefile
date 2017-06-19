@@ -1,14 +1,11 @@
 
 
-all: src tests
+all: src
 
 src: FORCE
 	make -C src
 
-execve: FORCE
-	make -C execve
-
-tests: FORCE execve
+tests: FORCE
 	make -C tests
 
 FORCE:

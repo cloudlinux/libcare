@@ -72,7 +72,7 @@ _install_originals() {
 }
 
 _run_tests() {
-	export LD_PRELOAD=/libcare/execve/execve.so
+	export LD_PRELOAD=/libcare/tests/execve/execve.so
 
 	local ld_linux="$KP_PROJECT_BUILD_DIR/elf/ld*"
 
@@ -109,7 +109,7 @@ kp_patch_test() {
 
 	KPATCH_TOOLS=/libcare/src		\
 	PATCH_ROOT=/root/${KP_PROJECT_PATCH%.*} \
-		/libcare/execve/listener >/root/test.log 2>&1 & :
+		/libcare/tests/execve/listener >/root/test.log 2>&1 & :
 	LISTENER_PID=$!
 
 	pushd $KP_PROJECT_BUILD_DIR

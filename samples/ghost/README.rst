@@ -16,8 +16,8 @@ Docker_ image and a container for it:
 
 .. code:: console
 
-        $ docker build docker/kernelcare/centos7/gcc-4.8.2-16.el7 \
-                -t kernelcare/centos7:gcc-4.8.2-16.el7
+        $ docker build -t kernelcare/centos7:gcc-4.8.2-16.el7 \
+                docker/kernelcare/centos7/gcc-4.8.2-16.el7
         ...
         $ docker run -v $PWD:/libcare --cap-add SYS_PTRACE -it \
                 kernelcare/centos7:gcc-4.8.2-16.el7 /bin/bash
@@ -36,7 +36,7 @@ Build the ``libcare`` tools:
 
 .. code:: console
 
-        [root@... /]# make -C /libcare/src clean all && make -C /libcare/execve
+        [root@... /]# make -C /libcare/src clean all && make -C /libcare/tests/execve
         ...
 
 Now build and run the sample GHOST app that runs 16 threads to constantly check

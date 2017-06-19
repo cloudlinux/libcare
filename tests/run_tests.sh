@@ -238,13 +238,16 @@ test_patch_startup_init_binfmt() {
 }
 
 test_patch_startup_init_execve() {
+
+	make -C execve
+
 	export KP_EXECVE_PATTERN="$PWD/*/$DESTDIR/*"
 	export KP_EXECVE_PATTERN_PATHNAME=1
-	export LD_PRELOAD="$PWD/../execve/execve.so"
+	export LD_PRELOAD="$PWD/execve/execve.so"
 	export PATCH_ROOT="$PWD/$DESTDIR-patchroot"
 
 	kcare_genl_sink_log=$(mktemp --tmpdir)
-	../execve/listener >$kcare_genl_sink_log 2>&1 & :
+	./execve/listener >$kcare_genl_sink_log 2>&1 & :
 	GENL_SINK_PID=$!
 	KILL_SUDO=0
 }
