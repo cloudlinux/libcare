@@ -100,13 +100,13 @@ To install the dependencies on RHEL/CentOS do the following:
 
 .. code:: console
 
-        $ sudo yum install -y binutils elfutils elfutils-libelf-devel nc libunwind-devel
+        $ sudo yum install -y binutils elfutils elfutils-libelf-devel libunwind-devel
 
 To install the dependencies on Debian/Ubuntu do the following:
 
 .. code:: console
 
-        $ sudo apt-get install -y binutils elfutils libelf-dev netcat-openbsd libunwind-dev
+        $ sudo apt-get install -y binutils elfutils libelf-dev libunwind-dev
 
 Building ``libcare``
 --------------------
