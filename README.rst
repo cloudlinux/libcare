@@ -13,7 +13,7 @@ to avoid interruption of service (see `server sample`_).
 See https://kernelcare.com for live Linux Kernel updates also.
 
 .. _GHOST: https://access.redhat.com/articles/1332213
-.. _`GHOST sample`: samples/GHOST/README.rst
+.. _`GHOST sample`: samples/ghost/README.rst
 .. _`CVE-2017-2615`: https://www.rapid7.com/db/vulnerabilities/centos_linux-cve-2017-2615
 .. _`server sample`: samples/server/README.rst
 
@@ -50,7 +50,7 @@ How the live patches are applied?
 
 It is a lot like loading a shared library into another process' memory:
 
-#. our binary ``libcare-doctor`` attaches to a patient via `ptrace(2)`_,
+#. our binary `libcare-doctor`_ attaches to a patient via `ptrace(2)`_,
 #. patient's objects are examined by the doctor,
 #. doctor puppets the patient to allocate patch memory near the original
    object,
@@ -61,14 +61,18 @@ It is a lot like loading a shared library into another process' memory:
    executing them first.
 
 .. _`ptrace(2)`: http://man7.org/linux/man-pages/man2/ptrace.2.html
+.. _libcare-doctor: docs/libcare-doctor.rst
 
 Now the patient executes patched versions of the functions.
+
+For more details follow to the `Patching <docs/internals.rst#Patching>`__
+chapter of the internals.
 
 Will my patches re-apply if I restart the process?
 --------------------------------------------------
 
-Not at the moment. We only track start of the new processes for the tests, see code
-in ``tests/execve``.
+Not at the moment. We only track start of the new processes for the tests, see
+`here <tests/execve/README.rst>`__.
 
 Does live patching affect performance?
 --------------------------------------
@@ -87,7 +91,7 @@ All the Linux-distros with available ``libunwind``, ``elfutils`` and ``binutils`
 packages are supported.
 
 However, the ``libcare`` is only tested on Ubuntu from 12.04 to 16.04 and on
-CentOS from 6.8 to 7.3.
+CentOS from 6.8 to 7.x.
 
 Dependencies
 ------------
@@ -129,3 +133,8 @@ It is highly recommended to run the tests as well, enabling Doctor
 
 Now all the required tools are built and we can build some patches. Skip to
 `server sample`_ for that.
+
+How does it work?
+-----------------
+
+Internals are quite confusing and are described `here <docs/internals.rst>`__.

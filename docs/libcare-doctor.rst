@@ -1,7 +1,7 @@
 The Doctor: ``libcare-doctor``
 ------------------------------
 
-.. _`doctor libcare-doctor`:
+Detailed description is in the `internals <internals.rst#patching>`__.
 
 All the job is done by the ``libcare-doctor``. It is called ``doctor`` hereafter
 and the targets of operations are thus called ``patients``.
@@ -14,8 +14,6 @@ The doctor accepts a few arguments that are common for all types of operations:
 Applying patches via ``patch``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. _`Patch application`:
-.. _`libcare-doctor`:
 
 The ``patch`` mode patches a process with ID given as an argument to ``-p`` option
 or all of them except self and ``init`` when the argument is ``all``. The patch
