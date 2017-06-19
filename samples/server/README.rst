@@ -58,8 +58,7 @@ The sample code is in ``samples/server/server.c`` where function
 
  .. code:: console
 
-        $ echo "Hi!" | nc localhost 3345
-        Hi!
+        $ echo 'Hi!' | nc localhost 3345
 
 .. _`netcat`: https://www.freebsd.org/cgi/man.cgi?query=nc&sektion=1
 
