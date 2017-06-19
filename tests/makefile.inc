@@ -19,10 +19,10 @@ LIBRARY ?= $(OBJDIR)/lib$(TESTNAME).so
 LIBOBJ ?= $(subst .so,,$(LIBRARY))
 endif
 
-ifneq ($(IS_KPATCH_CC),y)
+ifneq ($(IS_LIBCARE_CC),y)
 include ../makefile-patch.inc
 else
-include ../makefile-kpmake.inc
+include ../makefile-lpmake.inc
 endif
 
 all:	$(LIBRARY) $(LIBRARY_PATCH) $(BINARY) $(BINARY_PATCH)
@@ -40,7 +40,7 @@ ifneq ($(LIBRARY),)
 	-rm -f $(LIBOBJ).s $(LIBOBJ).orig.s $(LIBOBJ).patched.s
 	-rm -f $(LIBRARY) $(LIBRARY).stripped $(LIBRARY).undo-link $(LIBRARY_PATCH)
 endif
-	-rm -rf .kpatch*.s .kpmaketmp kpmake build
+	-rm -rf .kpatch*.s .lpmaketmp lpmake build
 
 install: all
 	mkdir -p $(DESTDIR) || :

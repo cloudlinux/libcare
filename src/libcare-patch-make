@@ -4,7 +4,7 @@ usage() {
 cat<<'EOF'
 Makes `kpatch'es for the makesystem in the current directory.
 
-Usage:	kpmake [-h|--help] [-u|--update || -c|--clean]
+Usage:	libcare-patch-make [-h|--help] [-u|--update || -c|--clean]
 	[-s|--srcdir=SRCDIR] \
 	[-d|--destdir=DESTDIRVAR] \
 	PATCH1 PATCH2 ...
@@ -30,21 +30,21 @@ prepare_env() {
 		exit 1
 	fi
 
-	export IS_KPATCH_CC=y
-	export CC=$KPATCH_PATH/kpatch_cc
+	export IS_LIBCARE_CC=y
+	export CC=$KPATCH_PATH/libcare-cc
 	export CXX=$CC
 
 	MAKE_OUTPUT=/dev/stdout
 
-	KPMAKEFILE=""
-	test -f kpmakefile && KPMAKEFILE="-f kpmakefile"
+	LPMAKEFILE=""
+	test -f lpmakefile && LPMAKEFILE="-f lpmakefile"
 
-	KPMAKE_ORIGINAL_DIR="${KPMAKE_ORIGINAL_DIR-$PWD/kpmake}"
-	KPMAKE_PATCHED_DIR="${KPMAKE_PATCHED_DIR-$PWD/.kpmaketmp/patched}"
-	KPMAKE_PATCHROOT="${KPMAKE_PATCHROOT-$PWD/patchroot}"
+	LPMAKE_ORIGINAL_DIR="${LPMAKE_ORIGINAL_DIR-$PWD/lpmake}"
+	LPMAKE_PATCHED_DIR="${LPMAKE_PATCHED_DIR-$PWD/.lpmaketmp/patched}"
+	LPMAKE_PATCHROOT="${LPMAKE_PATCHROOT-$PWD/patchroot}"
 
-	export KPMAKE_ORIGINAL_DIR KPMAKE_PATCHED_DIR KPMAKE_PATCHROOT
-	mkdir -p "$KPMAKE_ORIGINAL_DIR" "$KPMAKE_PATCHED_DIR" "$KPMAKE_PATCHROOT"
+	export LPMAKE_ORIGINAL_DIR LPMAKE_PATCHED_DIR LPMAKE_PATCHROOT
+	mkdir -p "$LPMAKE_ORIGINAL_DIR" "$LPMAKE_PATCHED_DIR" "$LPMAKE_PATCHROOT"
 
 	unset MAKELEVEL
 	unset MAKEFLAGS
@@ -55,9 +55,9 @@ prepare_env() {
 }
 
 restore_origs() {
-	find $srcdir -regex '.+\.[0-9]+\.kpmakeorig' | awk '
+	find $srcdir -regex '.+\.[0-9]+\.lpmakeorig' | awk '
 	{
-		match($0, /(.*)\.[0-9]+\.kpmakeorig/, a);
+		match($0, /(.*)\.[0-9]+\.lpmakeorig/, a);
 		fname = a[1];
 		if (!vers[fname] || vers[fname] > $0)
 			{ vers[fname] = $0; }
@@ -72,19 +72,19 @@ build_objects() {
 	restore_origs
 
 	if test -n "$do_clean"; then
-		make $KPMAKEFILE clean >$MAKE_OUTPUT 2>&1
-		rm -rf "$KPMAKE_ORIGINAL_DIR" "$KPMAKE_PATCHED_DIR"
+		make $LPMAKEFILE clean >$MAKE_OUTPUT 2>&1
+		rm -rf "$LPMAKE_ORIGINAL_DIR" "$LPMAKE_PATCHED_DIR"
 	fi
 
 	export KPATCH_STAGE=original
 	export KPCC_DBGFILTER_ARGS=""
 
 	echo "${green}BUILDING ORIGINAL CODE${reset}"
-	make $KPMAKEFILE >$MAKE_OUTPUT 2>&1
+	make $LPMAKEFILE >$MAKE_OUTPUT 2>&1
 
-	echo "${green}INSTALLING ORIGINAL OBJECTS INTO $KPMAKE_ORIGINAL_DIR${reset}"
-	make $KPMAKEFILE install				\
-		"$destdir=$KPMAKE_ORIGINAL_DIR"			\
+	echo "${green}INSTALLING ORIGINAL OBJECTS INTO $LPMAKE_ORIGINAL_DIR${reset}"
+	make $LPMAKEFILE install				\
+		"$destdir=$LPMAKE_ORIGINAL_DIR"			\
 		>$MAKE_OUTPUT 2>&1
 
 	local oldpwd="$(pwd)"
@@ -95,7 +95,7 @@ build_objects() {
 	i=0
 	for patch; do
 		echo "${red}applying $patch...${reset}"
-		patch -b -z .${i}.kpmakeorig -p1 < $patch
+		patch -b -z .${i}.lpmakeorig -p1 < $patch
 	done
 
 	if test -n "$srcdir"; then
@@ -106,23 +106,23 @@ build_objects() {
 	export KPCC_APPEND_ARGS="-Wl,-q"
 
 	echo "${green}BUILDING PATCHED CODE${reset}"
-	make $KPMAKEFILE >$MAKE_OUTPUT 2>&1
+	make $LPMAKEFILE >$MAKE_OUTPUT 2>&1
 
-	echo "${green}INSTALLING PATCHED OBJECTS INTO $KPMAKE_PATCHED_DIR${reset}"
-	make $KPMAKEFILE install				\
-		"$destdir=$KPMAKE_PATCHED_DIR"			\
+	echo "${green}INSTALLING PATCHED OBJECTS INTO $LPMAKE_PATCHED_DIR${reset}"
+	make $LPMAKEFILE install				\
+		"$destdir=$LPMAKE_PATCHED_DIR"			\
 		>$MAKE_OUTPUT 2>&1
 }
 
 build_kpatches() {
-	mkdir -p "${KPMAKE_PATCHROOT}"
+	mkdir -p "${LPMAKE_PATCHROOT}"
 
 	echo "${green}MAKING PATCHES${reset}"
 
-	for execfile in $(find "$KPMAKE_ORIGINAL_DIR" -perm /0111 -type f); do
+	for execfile in $(find "$LPMAKE_ORIGINAL_DIR" -perm /0111 -type f); do
 		origexec="$execfile"
-		filename="${origexec##*$KPMAKE_ORIGINAL_DIR/}"
-		patchedexec="$KPMAKE_PATCHED_DIR/$filename"
+		filename="${origexec##*$LPMAKE_ORIGINAL_DIR/}"
+		patchedexec="$LPMAKE_PATCHED_DIR/$filename"
 
 		buildid=$(eu-readelf -n "$origexec" | sed -n '/Build ID:/ { s/.* //; p }')
 		if ! eu-readelf -S "$patchedexec" | grep -q '.kpatch'; then
@@ -140,8 +140,8 @@ build_kpatches() {
 		$KPATCH_PATH/kpatch_strip --undo-link "$origexec" "${patchedexec}.stripped"
 		$KPATCH_PATH/kpatch_make -b "$buildid" \
 			"${patchedexec}.stripped" -o "${patchedexec}.kpatch"
-		cp "${patchedexec}.kpatch" "${KPMAKE_PATCHROOT}"/${buildid}.kpatch
-		echo "patch for ${origexec} is in ${KPMAKE_PATCHROOT}/${buildid}.kpatch"
+		cp "${patchedexec}.kpatch" "${LPMAKE_PATCHROOT}"/${buildid}.kpatch
+		echo "patch for ${origexec} is in ${LPMAKE_PATCHROOT}/${buildid}.kpatch"
 	done
 }
 

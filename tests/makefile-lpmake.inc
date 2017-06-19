@@ -5,7 +5,7 @@ ifneq ($(HAS_LIBRARY),)
 ifeq ($(KPATCH_STAGE),original)
 $(BINARY): LDLIBS += -l$(TESTNAME) -L$(OBJDIR)
 else
-$(BINARY): LDLIBS += -l$(TESTNAME) -L$(KPMAKE_ORIGINAL_DIR)
+$(BINARY): LDLIBS += -l$(TESTNAME) -L$(LPMAKE_ORIGINAL_DIR)
 endif
 
 endif

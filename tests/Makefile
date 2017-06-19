@@ -16,8 +16,8 @@ fastsleep.so: fastsleep.c
 
 clean: $(addprefix clean-,$(SUBDIRS))
 	rm -fr 	$(CURDIR)/build-patchroot	\
-		$(CURDIR)/kpmake-patchroot	\
-		$(CURDIR)/kpmakelevel-patchroot
+		$(CURDIR)/lpmake-patchroot	\
+		$(CURDIR)/lpmakelevel-patchroot
 	rm -f fastsleep.so
 
 clean-%: FORCE
@@ -33,25 +33,25 @@ build-patchroot: build
 	find	-type l -iname \*.kpatch \
 		-exec cp -L \{} $(CURDIR)/build-patchroot \;
 
-KPMAKE_TGTS := $(addprefix kpmake-,$(SUBDIRS))
-kpmake: $(KPMAKE_TGTS)
-kpmakelevel: $(KPMAKE_TGTS)
+LPMAKE_TGTS := $(addprefix lpmake-,$(SUBDIRS))
+lpmake: $(LPMAKE_TGTS)
+lpmakelevel: $(LPMAKE_TGTS)
 
-kpmake-%: export KPMAKE_PATCHROOT := kpmake
-kpmake-%: FORCE
-	cd $*; $(CURDIR)/../src/kpmake --clean *.diff
+lpmake-%: export LPMAKE_PATCHROOT := lpmake
+lpmake-%: FORCE
+	cd $*; $(CURDIR)/../src/libcare-patch-make --clean *.diff
 
-kpmake-patchroot: kpmake
-	mkdir -p $(CURDIR)/kpmake-patchroot
-	find 	-path '*/kpmake/*.kpatch' \
-		-exec cp \{} $(CURDIR)/kpmake-patchroot \;
+lpmake-patchroot: lpmake
+	mkdir -p $(CURDIR)/lpmake-patchroot
+	find 	-path '*/lpmake/*.kpatch' \
+		-exec cp \{} $(CURDIR)/lpmake-patchroot \;
 
-kpmakelevel-patchroot: kpmake
-	mkdir -p $(CURDIR)/kpmakelevel-patchroot
-	for f in $$(find -path '*/kpmake/*.kpatch'); do			\
+lpmakelevel-patchroot: lpmake
+	mkdir -p $(CURDIR)/lpmakelevel-patchroot
+	for f in $$(find -path '*/lpmake/*.kpatch'); do			\
 		buildid=$${f%.kpatch};					\
 		buildid=$${buildid##*/};				\
-		dir=$(CURDIR)/kpmakelevel-patchroot/$$buildid/;	\
+		dir=$(CURDIR)/lpmakelevel-patchroot/$$buildid/;	\
 		mkdir -p $$dir/1/;					\
 		cp $$f $$dir/1/kpatch.bin;				\
 		ln -fs 1 $$dir/latest;					\
@@ -82,15 +82,15 @@ run-build: fastsleep.so
 run-build: run-file-build run-dir-build run-startup-build run-unpatch
 run-build: run-startup-ld-linux-build
 
-run-kpmake: RUNTESTSFLAGS := -d kpmake
-run-kpmake: fastsleep.so
-run-kpmake: run-dir-kpmake run-startup-kpmake
-run-kpmake: run-startup-ld-linux-kpmake
+run-lpmake: RUNTESTSFLAGS := -d lpmake
+run-lpmake: fastsleep.so
+run-lpmake: run-dir-lpmake run-startup-lpmake
+run-lpmake: run-startup-ld-linux-lpmake
 
-run-kpmakelevel: RUNTESTSFLAGS := -d kpmake -p $(CURDIR)/kpmakelevel-patchroot
-run-kpmakelevel: fastsleep.so
-run-kpmakelevel: run-startup-kpmakelevel
+run-lpmakelevel: RUNTESTSFLAGS := -d lpmake -p $(CURDIR)/lpmakelevel-patchroot
+run-lpmakelevel: fastsleep.so
+run-lpmakelevel: run-startup-lpmakelevel
 
-run: run-build run-patchlevel run-kpmake run-kpmakelevel
+run: run-build run-patchlevel run-lpmake run-lpmakelevel
 
 FORCE:
