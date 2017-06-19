@@ -4,7 +4,7 @@ set -e
 
 TESTDIR=$(dirname $0)
 KPTOOLS=${KPTOOLS-$TESTDIR/../src}
-KPATCH_CTL=$KPTOOLS/kpatch_user
+LIBCARE_DOCTOR=$KPTOOLS/libcare-doctor
 STAGE=${STAGE-$TESTDIR/stage/tmp}
 
 TIME=$(which time)
@@ -25,9 +25,9 @@ xsudo() {
 check_permissions() {
 	local PTRACE_SCOPE=/proc/sys/kernel/yama/ptrace_scope
 	test $(id -u) -eq 0 && return 0
-	test -n "$(find $KPATCH_CTL -perm /6000 -uid 0)" && return 0
+	test -n "$(find $LIBCARE_DOCTOR -perm /6000 -uid 0)" && return 0
 	test -f $PTRACE_SCOPE && grep -q 1 $PTRACE_SCOPE && \
-		test -z "$(getcap $KPATCH_CTL | grep cap_sys_ptrace)" &&
+		test -z "$(getcap $LIBCARE_DOCTOR | grep cap_sys_ptrace)" &&
 		return 1
 	return 0
 }
@@ -102,12 +102,12 @@ test_patch_files() {
 	wait_file $outfile
 
 	if test -f $kpatch_file; then
-		$TIME $KPATCH_CTL -v patch-user -p $pid $kpatch_file \
+		$TIME $LIBCARE_DOCTOR -v patch-user -p $pid $kpatch_file \
 			>$logfile 2>&1 || :
 	fi
 
 	if test -f $kpatch_so_file; then
-		$TIME $KPATCH_CTL -v patch-user -p $pid $kpatch_so_file \
+		$TIME $LIBCARE_DOCTOR -v patch-user -p $pid $kpatch_so_file \
 			>>$logfile 2>&1 || :
 	fi
 
@@ -148,12 +148,12 @@ test_unpatch_files() {
 
 
 	if test -f $kpatch_file; then
-		$TIME $KPATCH_CTL -v patch-user -p $pid $kpatch_file \
+		$TIME $LIBCARE_DOCTOR -v patch-user -p $pid $kpatch_file \
 			>$logfile 2>&1 || :
 	fi
 
 	if test -f $kpatch_so_file; then
-		$TIME $KPATCH_CTL -v patch-user -p $pid $kpatch_so_file \
+		$TIME $LIBCARE_DOCTOR -v patch-user -p $pid $kpatch_so_file \
 			>>$logfile 2>&1 || :
 	fi
 
@@ -162,7 +162,7 @@ test_unpatch_files() {
 	check_result $testname $outfile
 	echo $? >${outfile}_patched
 
-	$TIME $KPATCH_CTL -v unpatch-user -p $pid \
+	$TIME $LIBCARE_DOCTOR -v unpatch-user -p $pid \
 		>$logfile 2>&1 || :
 
 	sleep 1
@@ -192,7 +192,7 @@ test_patch_dir() {
 	local pid=$!
 	wait_file $outfile
 
-	$TIME $KPATCH_CTL -v patch-user -p $pid $kpatch_dir \
+	$TIME $LIBCARE_DOCTOR -v patch-user -p $pid $kpatch_dir \
 	>$logfile 2>&1 || :
 
 	sleep 3
@@ -227,7 +227,7 @@ test_patch_startup_init_binfmt() {
 	done
 	kcare_genl_sink_log=$(mktemp --tmpdir)
 	xsudo ../binfmt/kcare_genl_sink "stdbuf -o 0 time \\
-		../../kpatch/kpatch_user -v \\
+		$LIBCARE_DOCTOR -v \\
 		patch-user -p %pid -s $PATCHROOT >logfile 2>&1" \
 			>$kcare_genl_sink_log 2>&1 & :
 	SUDO_GENL_SINK_PID=$!
@@ -386,13 +386,13 @@ test_patch_patchlevel() {
 	local kpatch_storage=$PWD/$testname/patchlevel-root
 
 	_set_latest $kpatch_storage 1
-	$TIME $KPATCH_CTL -v patch-user -p $pid $kpatch_storage \
+	$TIME $LIBCARE_DOCTOR -v patch-user -p $pid $kpatch_storage \
 		>$logfile 2>&1 || :
 
 	sleep 2
 
 	_set_latest $kpatch_storage 2
-	$TIME $KPATCH_CTL -v patch-user -p $pid $kpatch_storage \
+	$TIME $LIBCARE_DOCTOR -v patch-user -p $pid $kpatch_storage \
 		>>$logfile 2>&1 || :
 
 	sleep 2
@@ -461,7 +461,7 @@ test_one() {
 		echo "binary output"
 		show_log "$outfile"
 
-		echo "kpatch_user output"
+		echo "libcare-doctor output"
 		show_log "$logfile"
 
 		rm -f "$outfile" "$logfile"
@@ -509,7 +509,7 @@ main() {
 Not enough permissions for kpatch.
 
 Either run as root, or enable ptrace either globally or by
-\`sudo setcap cap_sys_ptrace+ep $PWD/../src/kpatch_user\`.
+\`sudo setcap cap_sys_ptrace+ep $LIBCARE_DOCTOR\`.
 EOF
 		exit 1
 	fi

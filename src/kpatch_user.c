@@ -895,7 +895,7 @@ static int usage_patch(const char *err)
 {
 	if (err)
 		fprintf(stderr, "err: %s\n", err);
-	fprintf(stderr, "usage: kpatch_ctl patch-user [options] <-p PID> <-r fd> <patch>\n");
+	fprintf(stderr, "usage: libcare-doctor patch [options] <-p PID> <-r fd> <patch>\n");
 	fprintf(stderr, "\nOptions:\n");
 	fprintf(stderr, "  -h          - this message\n");
 	fprintf(stderr, "  -s          - process was just executed\n");
@@ -1158,7 +1158,7 @@ static int usage_unpatch(const char *err)
 {
 	if (err)
 		fprintf(stderr, "err: %s\n", err);
-	fprintf(stderr, "usage: kpatch_ctl unpatch-user [options] <-p PID> "
+	fprintf(stderr, "usage: libcare-doctor unpatch [options] <-p PID> "
 		"[Build-ID or name ...]\n");
 	fprintf(stderr, "\nOptions:\n");
 	fprintf(stderr, "  -h          - this message\n");
@@ -1204,7 +1204,7 @@ int usage_info(const char *err)
 {
 	if (err)
 		fprintf(stderr, "err: %s\n", err);
-	fprintf(stderr, "usage: kpatch_ctl info-user [options] [-b BUILDID] [-p PID] [-s STORAGE] [-r REGEXP]\n");
+	fprintf(stderr, "usage: libcare-doctor info [options] [-b BUILDID] [-p PID] [-s STORAGE] [-r REGEXP]\n");
 	fprintf(stderr, "\nOptions:\n");
 	fprintf(stderr, "  -h		- this message\n");
 	fprintf(stderr, "  -b <BUILDID>	- output all processes having object with specified BuildID loaded\n");
@@ -1407,14 +1407,14 @@ static int usage(const char *err)
 {
 	if (err)
 		fprintf(stderr, "err: %s\n", err);
-	fprintf(stderr, "usage: kpatch_user [options] <cmd> [args]\n");
+	fprintf(stderr, "usage: libcare-doctor [options] <cmd> [args]\n");
 	fprintf(stderr, "\nOptions:\n");
 	fprintf(stderr, "  -v          - verbose mode\n");
 	fprintf(stderr, "  -h          - this message\n");
 	fprintf(stderr, "\nCommands:\n");
-	fprintf(stderr, "  patch-user  - apply patch to a user-space process\n");
-	fprintf(stderr, "  unpatch-user- unapply patch from a user-space process\n");
-	fprintf(stderr, "  info-user   - show info on applied patches\n");
+	fprintf(stderr, "  patch  - apply patch to a user-space process\n");
+	fprintf(stderr, "  unpatch- unapply patch from a user-space process\n");
+	fprintf(stderr, "  info   - show info on applied patches\n");
 	return -1;
 }
 

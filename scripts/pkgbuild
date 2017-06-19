@@ -356,9 +356,9 @@ overwrite_utils() {
 	TMPBIN=$(mktemp -d --tmpdir)
 
 	mkdir $TMPBIN/bin
-	ln -fs /libcare/src/kpatch_cc $TMPBIN/gcc
-	ln -fs /libcare/src/kpatch_cc $TMPBIN/cc
-	ln -fs /libcare/src/kpatch_cc $TMPBIN/g++
+	ln -fs /libcare/src/libcare-cc $TMPBIN/gcc
+	ln -fs /libcare/src/libcare-cc $TMPBIN/cc
+	ln -fs /libcare/src/libcare-cc $TMPBIN/g++
 	if ! test -x /usr/bin/g++; then
 		rm -f $TMPBIN/g++
 	fi
