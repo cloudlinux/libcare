@@ -22,7 +22,7 @@ The sample code is in ``samples/server/server.c`` where function
 
 1. Build the original server and run it:
 
- .. code:: console
+   .. code:: console
 
         $ cd samples/server
 	$ make install DESTDIR=vuln
@@ -32,20 +32,18 @@ The sample code is in ``samples/server/server.c`` where function
 2. Now let's install dependencies and build utils. Refer to `installation`_ for
    more details on the installation procedure and supported OSes.
 
- For RHEL-based distros do:
+   For RHEL-based distros do:
 
- .. code:: console
+   .. code:: console
 
         $ sudo yum install -y binutils elfutils elfutils-libelf-devel nc libunwind-devel
         ...
         $ make -C ../../src
         ...
 
-..
+   For Debian-based distros do:
 
- For Debian-based distros do:
-
- .. code:: console
+   .. code:: console
 
         $ sudo apt-get install -y binutils elfutils libelf-dev netcat-openbsd libunwind-dev
         ...
@@ -56,19 +54,18 @@ The sample code is in ``samples/server/server.c`` where function
 
 3. Try to connect to the server using freshly installed `netcat`_:
 
- .. code:: console
+   .. code:: console
 
         $ echo 'Hi!' | nc localhost 3345
 
-.. _`netcat`: https://www.freebsd.org/cgi/man.cgi?query=nc&sektion=1
+   The server should print on its console:
 
- The server should print on its console:
-
- .. code:: console
+   .. code:: console
 
         $ ./vuln/server
         Got Hi!
 
+.. _`netcat`: https://www.freebsd.org/cgi/man.cgi?query=nc&sektion=1
 
 4. Now exploit the server via the ``hack.sh`` script. The script analyzes binary
    and builds a string that causes server's buffer to overflow. The string
@@ -77,44 +74,44 @@ The sample code is in ``samples/server/server.c`` where function
 
    Open another console and run ``./hack.sh`` there:
 
- .. code:: console
+   .. code:: console
 
         $ ./hack.sh
 
- Server console should print:
+   Server console should print:
 
- .. code:: console
+   .. code:: console
 
         Got 0123456789ABCDEF01234567@
         You hacked me!
 
- This sample emulates a packaged binary network server vulnerable to
- `return-to-libc attack`_.
+   This sample emulates a packaged binary network server vulnerable to
+   `return-to-libc attack`_.
 
 .. _`return-to-libc attack`: https://en.wikipedia.org/wiki/Return-to-libc_attack
 
 5. Now build the patch for this code via `lcmake`_:
 
- .. code:: console
+   .. code:: console
 
         $ ../../src/libcare-patch-make --clean server.patch
         ...
         patch for $HOME/libcare/samples/server/lcmake/server is in ...
 
- Please note that this overwrites ``./server`` binary file with a
- patch-containing file, storing the original vulnerable server into
- ``./lcmake/server``.
+   Please note that this overwrites ``./server`` binary file with a
+   patch-containing file, storing the original vulnerable server into
+   ``./lcmake/server``.
 
 6. Examine ``patchroot`` directory and find patches there:
 
- .. code:: console
+   .. code:: console
 
         $ ls patchroot
         2d0e03e41bd82ec8b840a973077932cb2856a5ec.kpatch
 
 7. Apply patch to the running application via `libcare-doctor`_:
 
- .. code:: console
+   .. code:: console
 
         $ ../../src/libcare-doctor -v patch -p $(pidof server) patchroot
         ...
@@ -122,7 +119,7 @@ The sample code is in ``samples/server/server.c`` where function
 
 8. And check the hack again, ``You hacked me!`` string should go away:
 
- .. code:: console
+   .. code:: console
 
         (console2) $ ./hack.sh
         (console1) $ # with running ./vuln/server
