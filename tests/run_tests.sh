@@ -22,7 +22,7 @@ xsudo() {
 	fi
 }
 
-check_permissions() {
+have_ptrace_permissions() {
 	local PTRACE_SCOPE=/proc/sys/kernel/yama/ptrace_scope
 	test $(id -u) -eq 0 && return 0
 	test -n "$(find $LIBCARE_DOCTOR -perm /6000 -uid 0)" && return 0
@@ -30,6 +30,21 @@ check_permissions() {
 		test -z "$(getcap $LIBCARE_DOCTOR | grep cap_sys_ptrace)" &&
 		return 1
 	return 0
+}
+
+assert_ptrace_permissions() {
+
+	if have_ptrace_permissions; then
+		return
+	fi
+
+	cat <<EOF
+Not enough permissions for kpatch.
+
+Either run as root, or enable ptrace either globally or by
+\`sudo setcap cap_sys_ptrace+ep $LIBCARE_DOCTOR\`.
+EOF
+	exit 1
 }
 
 kill_reap() {
@@ -507,15 +522,7 @@ should_skip() {
 
 
 main() {
-	if ! check_permissions; then
-		cat <<EOF
-Not enough permissions for kpatch.
-
-Either run as root, or enable ptrace either globally or by
-\`sudo setcap cap_sys_ptrace+ep $LIBCARE_DOCTOR\`.
-EOF
-		exit 1
-	fi
+	assert_ptrace_permissions
 
 	export SLEEP_MULT=100000000
 
@@ -575,6 +582,11 @@ EOF
 		TESTS="${ALL_TESTS}"
 	fi
 
+	# kill runaway test executables at exit
+	trap 'tmpfile=$(mktemp);
+	      jobs -p > $tmpfile;
+	      while IFS= read -r pid; do kill $pid; done < $tmpfile;
+	      rm -f $tmpfile' 0
 
 	nskipped=0
 	nfailed=0
