@@ -401,11 +401,28 @@ void add_comm_cmd(struct kp_file *fout, struct kp_file *f, int l, int flags)
 
 /* -------------------------------------- code blocks matching ----------------------------------------- */
 
+static int is_mov_const_esi(const char *s)
+{
+	int cnum = 0;
+
+	/*
+	 * Since we're not interested in the value of line number, just match
+	 * the pattern without "extracting" it. Successfullness of the match
+	 * is confirmed by reaching %n conversion at the end of the pattern,
+	 * i.e. by non-zero number of characters consumed by that time.
+	 */
+	sscanf(s, " movl $%*i, %%esi%n", &cnum);
+	if (!cnum)
+		return 0;
+
+	return 1;
+}
+
 /* this is a minor improvement to avoid function patching just because of code line numbers are screwed, but real function hasn't changed */
 static int match_warn_once(struct cblock *b0, int *p0, struct cblock *b1, int *p1)
 {
 	char *s0, *s1;
-	int i0 = *p0, i1 = *p1;
+	int i0 = *p0, i1 = *p1, i;
 	kpstr_t xs0, xs1;
 
 	/* WARN_ONCE() generates a code with __LINE__ inside, so it easily leads to difference even in functions not really changed */
@@ -416,61 +433,59 @@ static int match_warn_once(struct cblock *b0, int *p0, struct cblock *b1, int *p
 	 * call warn_slowpath_XXX
 	 */
 
-	if (i0 + 5 >= b0->end || i1 + 5 >= b1->end)
-		return 0;
+	/* the lines that differ are guaranteed to be present in files */
+	s0 = cline(b0->f, i0++); s1 = cline(b1->f, i1++);
 
 	/* match movl $const, %esi */
-	s0 = cline(b0->f, i0++); s1 = cline(b1->f, i1++);
-	get_token(&s0, &xs0); get_token(&s1, &xs1);
-	if (kpstrcmpz(&xs0, "movl") || kpstrcmpz(&xs1, "movl"))
+	if (!is_mov_const_esi(s0) || !is_mov_const_esi(s1))
 		return 0;
 
-	get_token(&s0, &xs0); get_token(&s1, &xs1);
-	if (xs0.s[0] != '$' || xs1.s[0] != '$')
-		return 0;
+	/*
+	 * The distance between line number saving instruction and the call to
+	 * warn_slowpath* function can get quite big (e.g.  up to 14 lines) but
+	 * number of such cases is small.  For vmlinux images, only about 1% of
+	 * warn_slowpath* calls have this distance larger than 6.  The longer
+	 * the parsing distance here, the more chances to get caught by
+	 * compilers "optimizations" (e.g.  jmp's in/out that are not checked
+	 * here), so it's better to keep this limit not too big.
+	 */
+	for (i = 0; i < 7; i++, i0++, i1++) {
+		if (i0 >= b0->end || i1 >= b1->end)
+			return 0;
+		s0 = cline(b0->f, i0); s1 = cline(b1->f, i1);
 
-	get_token(&s0, &xs0); get_token(&s1, &xs1);
-	if (!isdigit(xs0.s[0]) || !isdigit(xs1.s[0]))
-		return 0;
+		/*
+		 * There are cases of several instructions saving constant value
+		 * to %esi in 5-6 lines before the call to the warn_slowpath*
+		 * functions.  Which means that the one saving warning's line
+		 * number is probably the last one, and not the one passed to
+		 * match_warn_once().  Need to check and fail here to prevent
+		 * false positives.
+		 */
+		if (is_mov_const_esi(s0) || is_mov_const_esi(s1))
+			return 0;
 
-	get_token(&s0, &xs0); get_token(&s1, &xs1);
-	if (xs0.s[0] != ',' || xs1.s[0] != ',')
-		return 0;
+		/* no diffs allowed between line number saving and the call */
+		if (strcmp_after_rename(b0->f, b1->f, s0, s1))
+			return 0;
 
-	get_token(&s0, &xs0); get_token(&s1, &xs1);
-	if (kpstrcmpz(&xs0, "%esi") || kpstrcmpz(&xs1, "%esi"))
-		return 0;
+		get_token(&s0, &xs0); get_token(&s1, &xs1);
+		if (!kpstrcmpz(&xs0, "call"))
+			goto call;
+	}
 
-	s0 = cline(b0->f, i0++); s1 = cline(b1->f, i1++);
-	get_token(&s0, &xs0); get_token(&s1, &xs1);
-	if (!kpstrcmpz(&xs0, "call"))
-		goto call;
-	if (strcmp_after_rename(b0->f, b1->f, s0, s1))
-		return 0;
+	return 0;
 
-	s0 = cline(b0->f, i0++); s1 = cline(b1->f, i1++);
-	get_token(&s0, &xs0); get_token(&s1, &xs1);
-	if (!kpstrcmpz(&xs0, "call"))
-		goto call;
-	if (strcmp_after_rename(b0->f, b1->f, s0, s1))
-		return 0;
-
-	s0 = cline(b0->f, i0++); s1 = cline(b1->f, i1++);
-	get_token(&s0, &xs0); get_token(&s1, &xs1);
-	if (!kpstrcmpz(&xs0, "call"))
-		goto call;
-	if (strcmp_after_rename(b0->f, b1->f, s0, s1))
-		return 0;
-
-	s0 = cline(b0->f, i0++); s1 = cline(b1->f, i1++);
-	get_token(&s0, &xs0); get_token(&s1, &xs1);
 call:
-	if (kpstrcmpz(&xs0, "call") || strcmp_after_rename(b0->f, b1->f, s0, s1))
-		return 0;
 	get_token(&s0, &xs0); get_token(&s1, &xs1);
 	if (kpstrcmpz(&xs0, "warn_slowpath_null") && kpstrcmpz(&xs0, "warn_slowpath_fmt") && kpstrcmpz(&xs0, "warn_slowpath_fmt_taint"))
 		return 0;
 
+	/*
+	 * Consider all the checked lines "identical" and skip them by setting
+	 * iterators to the number of "call warn_slowpath_*" line, they will
+	 * later get incremented before next for-iteration in cblock_cmp().
+	 */
 	*p0 = i0; *p1 = i1;
 	return 1;
 }
