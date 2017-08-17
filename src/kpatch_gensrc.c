@@ -441,15 +441,14 @@ static int match_warn_once(struct cblock *b0, int *p0, struct cblock *b1, int *p
 		return 0;
 
 	/*
-	 * The distance between line number saving instruction and the call to
-	 * warn_slowpath* function can get quite big (e.g.  up to 14 lines) but
-	 * number of such cases is small.  For vmlinux images, only about 1% of
-	 * warn_slowpath* calls have this distance larger than 6.  The longer
-	 * the parsing distance here, the more chances to get caught by
-	 * compilers "optimizations" (e.g.  jmp's in/out that are not checked
-	 * here), so it's better to keep this limit not too big.
+	 * Just in case, it's better to keep the search distance as small as
+	 * possible.  Usually, call to warn_slowpath* is within 6 next lines
+	 * (~99% of warnings in vmlinux), but in some functions that are better
+	 * left unpatched there are warnings with quite a large number of
+	 * arguments (e.g. tcp_recvmsg on 2.6.32 kernels has 15 lines between
+	 * saving line-number and calling warn_slowpath_fmt).
 	 */
-	for (i = 0; i < 7; i++, i0++, i1++) {
+	for (i = 0; i < 15; i++, i0++, i1++) {
 		if (i0 >= b0->end || i1 >= b1->end)
 			return 0;
 		s0 = cline(b0->f, i0); s1 = cline(b1->f, i1);
