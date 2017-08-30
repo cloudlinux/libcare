@@ -80,11 +80,11 @@
 
 #define GLIBC_TLS_PTR_GUARD 0x30
 
-#define STACK_OFFSET_UC_LINK 2
-#define STACK_OFFSET_START_CONTEXT 3
-#define STACK_OFFSET_UC_LINK_PTR 4
-#define STACK_OFFSET_COROUTINE_UCONTEXT 7
-#define STACK_OFFSET_COROUTINE 8
+#define STACK_OFFSET_UC_LINK (2 * sizeof(long))
+#define STACK_OFFSET_START_CONTEXT (3 * sizeof(long))
+#define STACK_OFFSET_UC_LINK_PTR (4 * sizeof(long))
+#define STACK_OFFSET_COROUTINE_UCONTEXT (7 * sizeof(long))
+#define STACK_OFFSET_COROUTINE (8 * sizeof(long))
 
 #define UCONTEXT_OFFSET_JMPBUF 0x38
 
@@ -148,7 +148,7 @@ locate_start_context_symbol(struct kpatch_process *proc,
 	}
 
 	rv = kpatch_process_mem_read(proc,
-				     regs.rbp - STACK_OFFSET_START_CONTEXT * sizeof(long),
+				     regs.rbp - STACK_OFFSET_START_CONTEXT,
 				     pstart_context,
 				     sizeof(*pstart_context));
 	if (rv < 0) {

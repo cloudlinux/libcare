@@ -947,10 +947,10 @@ int kpatch_arch_prctl_remote(struct kpatch_ptrace_ctx *pctx, int code, unsigned 
 		ret = -1;
 		goto poke;
 	}
-	ret = kpatch_process_mem_write(pctx->proc,
-				       &res,
-				       regs.rsp,
-				       sizeof(res));
+	ret = kpatch_process_mem_read(pctx->proc,
+				      regs.rsp,
+				      &res,
+				      sizeof(res));
 	if (ret < 0)
 		kplogerror("can't peek new stack data\n");
 
