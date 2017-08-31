@@ -158,9 +158,10 @@ locate_start_context_symbol(struct kpatch_process *proc,
 	return rv;
 }
 
-static int is_test_target(struct kpatch_process *proc)
+static int is_test_target(struct kpatch_process *proc,
+			  const char *procname)
 {
-	return strcmp(proc->comm, "fail_coro") == 0;
+	return strcmp(proc->comm, procname) == 0;
 }
 
 static int get_ptr_guard(struct kpatch_process *proc,
@@ -205,7 +206,7 @@ static int qemu_centos7_find_coroutines(struct kpatch_process *proc)
 	/* NOTE(pboldin) We accurately craft stack for test so we
 	 * don't need tcmalloc installed and used
 	 */
-	if (!tcmalloc && !is_test_target(proc)) {
+	if (!tcmalloc && !is_test_target(proc, "fail_coro")) {
 		kpdebug("FAIL. Can't find tcmalloc lib. Full [heap] scan is not "
 			"implemented yet");
 		return -1;
@@ -286,7 +287,7 @@ static struct kpatch_coro_ops *qemu_centos7_probe(struct kpatch_process *proc)
 	if (uname(&uts))
 		return NULL;
 
-	if (is_test_target(proc))
+	if (is_test_target(proc, "fail_coro"))
 		return &qemu_centos7_ops;
 
 	if (strncmp(proc->comm, "qemu-", 5))
@@ -301,8 +302,127 @@ static struct kpatch_coro_ops *qemu_centos7_probe(struct kpatch_process *proc)
 	return &qemu_centos7_ops;
 };
 
+static int qemu_cloudlinux_find_coroutines(struct kpatch_process *proc)
+{
+	int rv, i;
+
+	unsigned long coroutines_list, coroutine, ptr_guard;
+	int coroutines_list_offset, coroutine_env_offset;
+
+	struct variable_desc {
+		const char *name;
+		void *data;
+		unsigned long size;
+	} variables[] = {
+		{
+			"coroutines_list",
+			&coroutines_list,
+			sizeof(coroutines_list)
+		},
+		{
+			"coroutines_list_offset",
+			&coroutines_list_offset,
+			sizeof(coroutines_list_offset)
+		},
+		{
+			"coroutine_env_offset",
+			&coroutine_env_offset,
+			sizeof(coroutine_env_offset)
+		}
+	};
+	struct object_file *exec_obj;
+
+	exec_obj = kpatch_process_get_obj_by_regex(proc, proc->comm);
+	if (exec_obj == NULL) {
+		kpdebug("FAIL. Can't find main object\n");
+		return -1;
+	}
+
+	for (i = 0; i < ARRAY_SIZE(variables); i++) {
+		unsigned long addr;
+		struct variable_desc *variable = &variables[i];
+
+		rv = kpatch_resolve_undefined_single_dynamic(exec_obj,
+							     variable->name,
+							     &addr);
+		if (rv < 0) {
+			kpdebug("FAIL. Can't find symbol %s\n", variable->name);
+			return -1;
+		}
+
+		rv = kpatch_process_mem_read(proc, addr, variable->data,
+					     variable->size);
+		if (rv < 0) {
+			kpdebug("FAIL. can't read symbol %s\n", variable->name);
+			return -1;
+		}
+	}
+
+	rv = get_ptr_guard(proc, &ptr_guard);
+	if (rv < 0) {
+		kpdebug("FAIL. Can't get_ptr_guard\n");
+		return -1;
+	}
+
+	coroutine = coroutines_list;
+
+	kpdebug("coroutines_list = %lx, coroutines_list_offset = %d, coroutine_env_offset = %d\n",
+		coroutines_list, coroutines_list_offset, coroutine_env_offset);
+
+	while (coroutine) {
+		struct kpatch_coro *coro;
+		unsigned long *regs;
+
+		coro = kpatch_coro_new(proc);
+		if (!coro) {
+			kpdebug("FAIL. Can't alloc coroutine\n");
+			return -1;
+		}
+		rv = kpatch_process_mem_read(proc,
+					     coroutine + coroutine_env_offset,
+					     &coro->env,
+					     sizeof(coro->env));
+		if (rv < 0) {
+			kpdebug("FAIL. Can't get coroutine registers\n");
+			return -1;
+		}
+
+		regs = (unsigned long *)coro->env[0].__jmpbuf;
+		regs[JB_RBP] = PTR_DEMANGLE(regs[JB_RBP], ptr_guard);
+		regs[JB_RSP] = PTR_DEMANGLE(regs[JB_RSP], ptr_guard);
+		regs[JB_RIP] = PTR_DEMANGLE(regs[JB_RIP], ptr_guard);
+
+		rv = kpatch_process_mem_read(proc, coroutine + coroutines_list_offset,
+					     &coroutine, sizeof(coroutine));
+		if (rv < 0) {
+			kpdebug("FAIL. Can't get coroutine next\n");
+			return -1;
+		}
+		kpdebug("coroutine = %lx\n", coroutine);
+	}
+
+	return 0;
+}
+
+static struct kpatch_coro_ops qemu_cloudlinux_ops = {
+	qemu_cloudlinux_find_coroutines,
+};
+
+static struct kpatch_coro_ops *qemu_cloudlinux_probe(struct kpatch_process *proc)
+{
+	/* TODO(pboldin): check presence of our variables */
+	if (is_test_target(proc, "fail_coro_listed"))
+		return &qemu_cloudlinux_ops;
+
+	if (strncmp(proc->comm, "qemu-", 5))
+		return NULL;
+
+	return &qemu_cloudlinux_ops;
+}
+
 static kpatch_coro_probe kpatch_coro_probes[] = {
 	qemu_centos7_probe,
+	qemu_cloudlinux_probe,
 };
 
 

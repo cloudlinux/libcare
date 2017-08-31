@@ -549,7 +549,7 @@ elf_object_load_dynsym(struct object_file *o)
 		return -1;
 
 	rv = kpatch_process_mem_read(o->proc,
-				     o->vma_start + phdr->p_vaddr,
+				     o->load_offset + phdr->p_vaddr,
 				     dynamics,
 				     phdr->p_memsz);
 	if (rv < 0)
