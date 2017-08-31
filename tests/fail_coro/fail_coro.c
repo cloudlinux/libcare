@@ -18,7 +18,7 @@ typedef struct {
 	void *a1;
 	void *a2;
 	void *a3;
-	void *a4;
+	void *stack_orig;
 
 	void *stack;
 	sigjmp_buf env;
@@ -30,6 +30,38 @@ union cc_arg {
 	void *p;
 	int i[2];
 };
+
+/*
+ * Reproduce the exact stack layout expected by the coroutine-detection
+ * algorithm. Since different versions of GCC produce different machine code
+ * we had to place the asm code there.
+ *
+ * The following is the C code:
+ */
+
+#if 0
+static void coroutine_trampoline(int i0, int i1)
+{
+    union cc_arg arg;
+    CoroutineUContext *self;
+    Coroutine *co;
+
+    arg.i[0] = i0;
+    arg.i[1] = i1;
+    self = arg.p;
+    co = &self->base;
+
+    /* Initialize longjmp environment and switch back the caller */
+    if (!sigsetjmp(self->env, 0)) {
+        siglongjmp(*(sigjmp_buf *)co->entry_arg, 1);
+    }
+
+    while (true) {
+        co->entry(co->entry_arg);
+        /* qemu_coroutine_switch(co, co->caller, COROUTINE_TERMINATE); */
+    }
+}
+#endif
 
 asm (
 "coroutine_trampoline:\n"
@@ -67,12 +99,12 @@ asm (
 
 extern void coroutine_trampoline(void);
 
-static CoroutineUContext *co;
+static CoroutineUContext *running_co;
 
 static void coroutine_yield(void)
 {
-	if (!sigsetjmp(co->env, 0))
-		siglongjmp(co->caller, 1);
+	if (!sigsetjmp(running_co->env, 0))
+		siglongjmp(running_co->caller, 1);
 }
 
 static void
@@ -89,9 +121,10 @@ func(void *arg)
 #define PAGE_SIZE	4096
 #define PAGE_MASK	(PAGE_SIZE - 1)
 
-int
-main(void)
+CoroutineUContext *coroutine_new(void (*entry)(void *),
+				 void *entry_arg)
 {
+	CoroutineUContext *co;
 	const size_t stack_size = 1 << 14;
 	ucontext_t uc, old_uc;
 	sigjmp_buf old_env;
@@ -99,16 +132,17 @@ main(void)
 	void *stack;
 
 	if (getcontext(&uc) == -1)
-		abort();
+		return NULL;
 
 	co = malloc(sizeof(*co));
 	if (co == NULL)
-		abort();
+		return NULL;
 
 	stack = malloc(stack_size);
 	if (stack == NULL)
-		abort();
+		return NULL;
 
+	co->stack_orig = stack;
 	co->stack = (void *)((unsigned long)(stack + PAGE_SIZE - 1) & ~PAGE_MASK);
 
 	co->entry_arg = &old_env;
@@ -118,8 +152,8 @@ main(void)
 	uc.uc_stack.ss_size = stack_size - (co->stack - stack) & ~PAGE_MASK;
 	uc.uc_stack.ss_flags = 0;
 
-	printf("func=%p co=%p old_uc=%p uc=%p stack=%p ssize=%lx\n", func, co, &old_uc, &uc, co->stack,
-	       uc.uc_stack.ss_size);
+	printf("func=%p co=%p old_uc=%p uc=%p stack=%p ssize=%lx\n",
+	       func, co, &old_uc, &uc, co->stack, uc.uc_stack.ss_size);
 
 	arg.p = co;
 
@@ -130,18 +164,40 @@ main(void)
 		swapcontext(&old_uc, &uc);
 	}
 
-	co->entry = func;
-	co->entry_arg = "Hello from UNPATCHED";
+	co->entry = entry;
+	co->entry_arg = entry_arg;
+
+	return co;
+}
+
+void coroutine_free(CoroutineUContext *co)
+{
+	free(co->stack_orig);
+	free(co);
+}
+
+void coroutine_exec(CoroutineUContext *co)
+{
+	running_co = co;
+
+	if (!sigsetjmp(co->caller, 0)) {
+		siglongjmp(co->env, 1);
+	}
+}
+
+int
+main(void)
+{
+	CoroutineUContext *co;
+
+	co = coroutine_new(func, "Hello from UNPATCHED");
 
 	while (1) {
-		if (!sigsetjmp(co->caller, 0)) {
-			siglongjmp(co->env, 1);
-		}
+		coroutine_exec(co);
 		sleep(1);
 	}
 
-	free(stack);
-	free(co);
+	coroutine_free(co);
 
 	return 0;
 }
