@@ -163,13 +163,36 @@ static int is_test_target(struct kpatch_process *proc)
 	return strcmp(proc->comm, "fail_coro") == 0;
 }
 
+static int get_ptr_guard(struct kpatch_process *proc,
+			 unsigned long *ptr_guard)
+{
+	int ret;
+	unsigned long tls;
+
+	ret = kpatch_arch_prctl_remote(proc2pctx(proc), ARCH_GET_FS, &tls);
+	if (ret < 0) {
+		kpdebug("FAIL. Can't get TLS base value\n");
+		return -1;
+	}
+	ret = kpatch_process_mem_read(proc,
+				      tls + GLIBC_TLS_PTR_GUARD,
+				      ptr_guard,
+				      sizeof(*ptr_guard));
+	if (ret < 0) {
+		kpdebug("FAIL. Can't get pointer guard value\n");
+		return -1;
+	}
+
+	return 0;
+}
+
 static int qemu_centos7_find_coroutines(struct kpatch_process *proc)
 {
 	struct object_file *oheap, *tcmalloc;
 	struct process_mem_iter *iter;
 	struct kpatch_coro *coro;
 	struct vm_area heap;
-	unsigned long __start_context, tls, ptr_guard, cur;
+	unsigned long __start_context, ptr_guard, cur;
 	int ret;
 
 	kpdebug("Looking for coroutines in QEMU %d...\n", proc->pid);
@@ -195,17 +218,9 @@ static int qemu_centos7_find_coroutines(struct kpatch_process *proc)
 		return -1;
 	}
 
-	ret = kpatch_arch_prctl_remote(proc2pctx(proc), ARCH_GET_FS, &tls);
+	ret = get_ptr_guard(proc, &ptr_guard);
 	if (ret < 0) {
-		kpdebug("FAIL. Can't get TLS base value\n");
-		return -1;
-	}
-	ret = kpatch_process_mem_read(proc,
-				      tls + GLIBC_TLS_PTR_GUARD,
-				      &ptr_guard,
-				      sizeof(ptr_guard));
-	if (ret < 0) {
-		kpdebug("FAIL. Can't get pointer guard value\n");
+		kpdebug("FAIL. Can't get_ptr_guard\n");
 		return -1;
 	}
 
