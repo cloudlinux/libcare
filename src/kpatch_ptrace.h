@@ -37,8 +37,8 @@ int kpatch_process_mem_iter_peek(struct process_mem_iter *iter,
 
 #define PEEK_ULONG(p) ({						\
 	unsigned long l;						\
-       if (kpatch_process_mem_iter_peek_ulong(iter, &l,			\
-					      (unsigned long)(p)) < 0) {\
+	if (kpatch_process_mem_iter_peek_ulong(iter, &l,		\
+					       (unsigned long)(p)) < 0) {\
 		kpdebug("FAIL. Failed to peek at 0x%lx - %s\n",		\
 			(unsigned long)(p), strerror(errno));		\
 		return -1;						\

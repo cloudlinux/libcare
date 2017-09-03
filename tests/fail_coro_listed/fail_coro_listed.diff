@@ -1,0 +1,13 @@
+--- a/fail_coro_listed.c	2016-12-11 20:36:48.788000000 +0000
++++ b/fail_coro_listed.c	2016-12-11 20:36:58.368000000 +0000
+@@ -81,8 +81,8 @@
+ 	const char *str = arg;
+ 
+ 	while (1) {
+-		printf("%s\n", str);
+-		coroutine_yield();
++		printf("Hello from PATCHED %s\n", str);
++		coroutine_yield();
+ 	}
+ }
+ 

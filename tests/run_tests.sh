@@ -585,7 +585,7 @@ main() {
 	# kill runaway test executables at exit
 	trap 'tmpfile=$(mktemp);
 	      jobs -p > $tmpfile;
-	      while IFS= read -r pid; do kill $pid; done < $tmpfile;
+	      while IFS= read -r pid; do kill $pid 2>/dev/null || :; done < $tmpfile;
 	      rm -f $tmpfile' 0
 
 	nskipped=0

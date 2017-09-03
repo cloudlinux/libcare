@@ -1,0 +1,5 @@
+{
+	coroutines_list;
+	coroutines_list_offset;
+	coroutine_env_offset;
+};
