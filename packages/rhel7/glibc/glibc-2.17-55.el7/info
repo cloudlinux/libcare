@@ -72,7 +72,16 @@ _install_originals() {
 }
 
 _run_tests() {
-	export LD_PRELOAD=/libcare/tests/execve/execve.so
+	if test -f $LIBCARE_DIR/execve/execve.so; then
+		LD_PRELOAD=$LIBCARE_DIR/execve/execve.so
+	elif test -f $LIBCARE_DIR/tests/execve/execve.so; then
+		LD_PRELOAD=$LIBCARE_DIR/tests/execve/execve.so
+	else
+		echo "Can't find execve.so required to run tests"
+		exit 1
+	fi
+
+	export LD_PRELOAD
 
 	local ld_linux="$KP_PROJECT_BUILD_DIR/elf/ld*"
 
@@ -110,9 +119,11 @@ kp_patch_test() {
 	rm -f /var/run/libcare.sock
 
 	PATCH_ROOT=/root/${KP_PROJECT_PATCH%.*}
-	/libcare/src/libcare-ctl -v server /var/run/libcare.sock $PATCH_ROOT \
-		>/root/test.log 2>&1 & :
+	$KPATCH_PATH/libcare-ctl -v server /var/run/libcare.sock $PATCH_ROOT \
+		>/data/test.log 2>&1 & :
 	LISTENER_PID=$!
+	sleep 1
+	kill -0 $LISTENER_PID
 
 	pushd $KP_PROJECT_BUILD_DIR
 
@@ -123,11 +134,11 @@ kp_patch_test() {
 
 	popd
 
-	local patched=$(awk '/kpatch_ctl targeting/ { n++ } END { print n }' /root/test.log)
+	local patched=$(awk '/kpatch_ctl targeting/ { n++ } END { print n }' /data/test.log)
 
 	test $patched -ge $executed
 
-	grep -vq 'No patch(es) applicable to' /root/test.log
-	grep 'patch hunk(s) have been successfully applied' /root/test.log \
+	grep -vq 'No patch(es) applicable to' /data/test.log
+	grep 'patch hunk(s) have been successfully applied' /data/test.log \
 		| wc -l
 }

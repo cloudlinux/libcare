@@ -1,0 +1,4 @@
+toil==3.10.1
+boto3
+requests
+pyyaml

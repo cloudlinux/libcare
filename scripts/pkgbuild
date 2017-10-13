@@ -54,8 +54,9 @@ prepare() {
 
 	# Export env vars that are needed during the build
 	SCRIPTS="$(cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd)"
-	SPWD="$(realpath $SCRIPTS/../)"
-	export KPATCH_PATH=$SPWD/src
+	LIBCARE_DIR="${LIBCARE_DIR:-$SCRIPTS/..}"
+	KPATCH_PATH="${KPATCH_PATH:-$LIBCARE_DIR/src}"
+	export LIBCARE_DIR KPATCH_PATH
 	export OLDPATH=$PATH
 	export KPATCH_PASSTHROUGH_ASM=1
 	CPUS=`cat /proc/cpuinfo | grep ^processor | wc -l`
@@ -130,18 +131,20 @@ kp_prepare_source_deb() {
 }
 
 kp_prepare_source() {
-	echo "  downloading source for $KP_PROJECT"
-	kp_download_source_$KP_PROJECT_FORMAT
+	if ! test -f /kcdata/$KP_PROJECT_SOURCE; then
+		echo "  downloading source for $KP_PROJECT"
+		kp_download_source_$KP_PROJECT_FORMAT
+	fi
 	echo "  preparing source for $KP_PROJECT"
 	kp_prepare_source_$KP_PROJECT_FORMAT
 }
 
 kp_patch_source() {
 	echo "  patching project"
-	PATCH_DIR=$SPWD/patches
+	PATCH_DIR=$LIBCARE_DIR/patches
 	#patch_list_apply requires this dir
 	mkdir -p /tmp/build.kpatch
-	$SPWD/scripts/patch_list_apply $KP_PROJECT_DIR $PDIR/plist $PATCH_DIR
+	$SCRIPTS/patch_list_apply $KP_PROJECT_DIR $PDIR/plist $PATCH_DIR
 }
 
 kp_prebuild_rpm() {
@@ -364,10 +367,10 @@ overwrite_utils() {
 	TMPBIN=$(mktemp -d --tmpdir)
 
 	mkdir $TMPBIN/bin
-	ln -fs /libcare/src/libcare-cc $TMPBIN/gcc
-	ln -fs /libcare/src/libcare-cc $TMPBIN/cc
-	ln -fs /libcare/src/libcare-cc $TMPBIN/g++
-	ln -fs /libcare/src/libcare-cc $TMPBIN/c++
+	ln -fs $KPATCH_PATH/libcare-cc $TMPBIN/gcc
+	ln -fs $KPATCH_PATH/libcare-cc $TMPBIN/cc
+	ln -fs $KPATCH_PATH/libcare-cc $TMPBIN/g++
+	ln -fs $KPATCH_PATH/libcare-cc $TMPBIN/c++
 	if ! test -x /usr/bin/g++; then
 		rm -f $TMPBIN/g++
 	fi
@@ -379,6 +382,11 @@ overwrite_utils() {
 	fi
 
 	export PATH=$TMPBIN:$PATH
+
+	if test "$(command -v cc)" != "$TMPBIN/cc"; then
+		echo "Can't install our wrappers, missing?"
+		exit 1
+	fi
 }
 
 kp_patch_test() {
