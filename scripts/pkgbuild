@@ -73,6 +73,11 @@ clean_dirs() {
 	rm -rf $KP_PROJECT_BUILD_ROOT /root/root.original /root/root.patched
 }
 
+kp_prepare_env_hook() {
+	# use this to add repos
+	:
+}
+
 kp_pack_prebuilt() {
 	echo "  packing prebuilt $KP_PROJECT into $KP_PROJECT_PREBUILT"
 	pushd $KP_PROJECT_BUILD_ROOT
@@ -385,6 +390,8 @@ main() {
 	clean_dirs
 
 	overwrite_utils
+
+	kp_prepare_env_hook
 
 	if [ "$ACTION" == "prebuild" ]; then
 		kp_prepare_source
