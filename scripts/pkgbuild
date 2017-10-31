@@ -120,7 +120,8 @@ kp_prepare_source_rpm() {
 
 	sed -i 's/.rpm$//g' $KP_PROJECT_BUILD_ROOT/dependencies.txt
 
-	rpm -ivh /kcdata/$KP_PROJECT_SOURCE
+	rpm -ivh /kcdata/$KP_PROJECT_SOURCE \
+		--define "_topdir $KP_PROJECT_BUILD_ROOT"
 }
 
 kp_prepare_source_deb() {
@@ -152,6 +153,7 @@ kp_prebuild_rpm() {
 	eval rpmbuild --nocheck --noclean 				\
 		-bc 							\
 		$KP_RPMBUILD_FLAGS					\
+		'--define "_topdir $KP_PROJECT_BUILD_ROOT"'		\
 		$KP_PROJECT_BUILD_ROOT/SPECS/$KP_PROJECT_SPEC 2>&1 |	\
 		tee $KP_PROJECT_BUILD_ROOT/prebuild.log
 }
@@ -237,6 +239,7 @@ kp_build_rpm() {
 		--short-circuit					\
 		-bc						\
 		$KP_RPMBUILD_FLAGS				\
+		'--define "_topdir $KP_PROJECT_BUILD_ROOT"'	\
 		$KP_PROJECT_BUILD_ROOT/SPECS/$KP_PROJECT_SPEC
 }
 
