@@ -1488,13 +1488,13 @@ int main(int argc, char **argv)
 			if (k >= 2)
 				kpfatal("only 2 input files must be specified\n");
 			if ((err = read_file(&infile[k], optarg)))
-				kpfatal("Can't read input file: %s\n", strerror(err));
+				kpfatal("Can't read input file '%s': %s\n", optarg, strerror(err));
 			infile[k].id = k;
 			k++;
 			break;
 		case 'o':
 			if ((err = create_file(&outfile, optarg)))
-				kpfatal("Can't open output file: %s\n", strerror(err));
+				kpfatal("Can't open output file '%s': %s\n", optarg, strerror(err));
 			break;
 		case 'O':
 			if (!strcmp(optarg, "rhel5")) os = OS_RHEL5;
