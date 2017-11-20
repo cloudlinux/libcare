@@ -2,7 +2,7 @@
 
 set -e
 
-TESTDIR=$(dirname $0)
+TESTDIR=$(realpath $(dirname $0))
 KPTOOLS=${KPTOOLS-$TESTDIR/../src}
 LIBCARE_DOCTOR=$KPTOOLS/libcare-doctor
 STAGE=${STAGE-$TESTDIR/stage/tmp}
@@ -511,7 +511,7 @@ should_skip() {
 		fi
 		;;
 	fail_busy_threads|fail_busy_single|fail_busy_single_top|fail_coro|\
-	fail_threading)
+	fail_threading|fail_coro_listed)
 		if test "$FLAVOR" = "test_unpatch_files"; then
 			return 0
 		fi
