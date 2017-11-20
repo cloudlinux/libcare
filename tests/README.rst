@@ -16,7 +16,7 @@ To run the tests emit:
     $ make
 
 this will build and run all the tests discovered for all types of build
-and all flavors of the ``libcare-doctor`` usage.
+and all flavors of the ``libcare-ctl`` usage.
 
 There are two types of test builds.
 
@@ -36,7 +36,7 @@ build-$test`` or ``make libcare-patch-make-$test`` commands.
 Sometimes it is necessary to debug a particular test so all changes MUST
 retain the ability to run the tests manually. The manual run is done by
 executing an appropriate binary (with the ``LD_LIBRARY_PATH`` set as
-needed) and target ``libcare-doctor patch`` at its process.
+needed) and target ``libcare-ctl patch`` at its process.
 
 However, it is recommended to run tests by the ``./run_tests.sh`` script,
 available in the ``tests`` directory.

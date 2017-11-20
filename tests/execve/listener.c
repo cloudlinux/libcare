@@ -76,7 +76,7 @@ int main()
 			exit(EXIT_FAILURE);
 		}
 
-		sprintf(buf, "%s/libcare-doctor patch -s -p %d -r %d %s",
+		sprintf(buf, "%s/libcare-ctl patch -s -p %d -r %d %s",
 			kpatch_tools, pid, incoming, patch_root);
 		fprintf(stderr, "Executing %s\n", buf);
 		rv = system(buf);

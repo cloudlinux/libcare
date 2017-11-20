@@ -17,20 +17,20 @@ Then the appropriate library call is done and, if successful, code of the new
 binary takes control over the process.
 
 
-.. _`libcare-doctor`: ../../docs/libcare-doctor.rst
+.. _`libcare-ctl`: ../../docs/libcare-ctl.rst
 
 
 ``listener.c``
 --------------
 
 The ``listener.c`` is the code that listens on the port 4233 and waits for
-incoming pids. It then invokes `libcare-doctor`_ with arguments specifying that
+incoming pids. It then invokes `libcare-ctl`_ with arguments specifying that
 pid and incoming socket's file descriptor that is inherited.
 
-``libcare-doctor`` part
+``libcare-ctl`` part
 -----------------------
 
-``libcare-doctor`` is instructed with the ``-r`` option that it should expect 
+``libcare-ctl`` is instructed with the ``-r`` option that it should expect
 the process that is currently executing the ``execve`` wrapper code.
 
 The doctor attaches to the patient as usual.

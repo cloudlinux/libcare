@@ -104,7 +104,7 @@ vulnerability is patched:
 
 .. code:: console
 
-        [root@... /kcdata]# /libcare/src/libcare-doctor -v patch -p $patient_pid \
+        [root@... /kcdata]# /libcare/src/libcare-ctl -v patch -p $patient_pid \
                         root/kpatch-glibc-2.17-55.el7.x86_64
         ...
         1 patch hunk(s) have been successfully applied to PID '...'
@@ -117,7 +117,7 @@ You can patch any running application this way:
 
         [root@... /kcdata]# sleep 100 &
         [root@... /kcdata]# patient_pid=$!
-        [root@... /kcdata]# /libcare/src/libcare-doctor -v patch -p $patient_pid \
+        [root@... /kcdata]# /libcare/src/libcare-ctl -v patch -p $patient_pid \
                         root/kpatch-glibc-2.17-55.el7.x86_64
         ...
         1 patch hunk(s) have been successfully applied to PID '...'

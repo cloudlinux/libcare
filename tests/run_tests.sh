@@ -4,7 +4,7 @@ set -e
 
 TESTDIR=$(realpath $(dirname $0))
 KPTOOLS=${KPTOOLS-$TESTDIR/../src}
-LIBCARE_DOCTOR=$KPTOOLS/libcare-doctor
+LIBCARE_DOCTOR=$KPTOOLS/libcare-ctl
 STAGE=${STAGE-$TESTDIR/stage/tmp}
 
 TIME=$(which time)
@@ -479,7 +479,7 @@ test_one() {
 		echo "binary output"
 		show_log "$outfile"
 
-		echo "libcare-doctor output"
+		echo "libcare-ctl output"
 		show_log "$logfile"
 
 		rm -f "$outfile" "$logfile"

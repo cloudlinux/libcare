@@ -1,4 +1,4 @@
-TARGETS = kpatch_gensrc kpatch_make kpatch_strip libcare-cc libcare-doctor
+TARGETS = kpatch_gensrc kpatch_make kpatch_strip libcare-cc libcare-ctl
 DEBUG = yes # comment out this line if not debug
 
 CC = gcc
@@ -30,9 +30,9 @@ kpatch_make: kpatch_make.o
 LIBUNWIND_LIBS := $(shell pkg-config --libs libunwind libunwind-ptrace)
 
 
-libcare-doctor: kpatch_user.o kpatch_elf.o kpatch_ptrace.o kpatch_coro.o rbtree.o kpatch_log.o
-libcare-doctor: kpatch_process.o kpatch_common.o
-libcare-doctor: LDLIBS += -lelf -lrt $(LIBUNWIND_LIBS)
+libcare-ctl: kpatch_user.o kpatch_elf.o kpatch_ptrace.o kpatch_coro.o rbtree.o kpatch_log.o
+libcare-ctl: kpatch_process.o kpatch_common.o
+libcare-ctl: LDLIBS += -lelf -lrt $(LIBUNWIND_LIBS)
 
 kpatch_strip: kpatch_strip.o kpatch_elf_objinfo.o kpatch_log.o
 kpatch_strip: LDLIBS = -lelf

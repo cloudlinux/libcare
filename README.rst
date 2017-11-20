@@ -55,7 +55,8 @@ How the live patches are applied?
 
 It is a lot like loading a shared library into another process' memory:
 
-#. our binary `libcare-doctor`_ attaches to a patient via `ptrace(2)`_,
+#. our binary `libcare-ctl`_ (the doctor) attaches to a patient via
+   `ptrace(2)`_,
 #. patient's objects are examined by the doctor,
 #. doctor puppets the patient to allocate patch memory near the original
    object,
@@ -66,7 +67,7 @@ It is a lot like loading a shared library into another process' memory:
    executing them first.
 
 .. _`ptrace(2)`: http://man7.org/linux/man-pages/man2/ptrace.2.html
-.. _libcare-doctor: docs/libcare-doctor.rst
+.. _libcare-ctl: docs/libcare-ctl.rst
 
 Now the patient executes patched versions of the functions.
 
@@ -127,11 +128,11 @@ This should build all the utilities required to produce a patch out of some
 project's source code.
 
 It is highly recommended to run the tests as well, enabling Doctor
-``libcare-doctor`` to attach ``ptrace``\ cles to any of the processes first:
+``libcare-ctl`` to attach ``ptrace``\ cles to any of the processes first:
 
 .. code:: console
 
-        $ sudo setcap cap_sys_ptrace+ep ./src/libcare-doctor
+        $ sudo setcap cap_sys_ptrace+ep ./src/libcare-ctl
         $ make -C tests && echo OK
         ...
         OK

@@ -1,9 +1,9 @@
-The Doctor: ``libcare-doctor``
+The Doctor: ``libcare-ctl``
 ------------------------------
 
 Detailed description is in the `internals <internals.rst#patching>`__.
 
-All the job is done by the ``libcare-doctor``. It is called ``doctor`` hereafter
+All the job is done by the ``libcare-ctl``. It is called ``doctor`` hereafter
 and the targets of operations are thus called ``patients``.
 
 The doctor accepts a few arguments that are common for all types of operations:
@@ -22,7 +22,7 @@ positional argument:
 
 .. code:: console
 
- $ libcare-doctor patch -p <PID_or_all> some_patch_file.kpatch
+ $ libcare-ctl patch -p <PID_or_all> some_patch_file.kpatch
 
 The patches are basically ELF files of relocatable type ``REL`` with binary
 meta-information such as BuildID and name of the patch target prepended.
@@ -50,7 +50,7 @@ functions from a stash allocated along with the patch and puppets patients to
 Showing info via ``info``
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The last entry to the ``libcare-doctor`` is the ``info`` command that lists all
+The last entry to the ``libcare-ctl`` is the ``info`` command that lists all
 the objects and their BuildIDs for the set of the processes requested. Its
 primary use is as the utility for the book-keeping software.
 

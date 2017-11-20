@@ -4,7 +4,7 @@ Internals
 
 First, we `prepare project patch`_ by
 `examining the differences in assembler files`_ generated during the original
-and the patched source code build. Finally, users invoke the ``libcare-doctor`` that
+and the patched source code build. Finally, users invoke the ``libcare-ctl`` that
 `applies the patches`_. This is a lot like loading a shared object (library)
 into other process memory and then changing original code to unconditionally
 jump to the new version of the code.
@@ -221,7 +221,7 @@ The following is the verbose description of the
 Attaching
 ~~~~~~~~~
 
-When a user asks ``libcare-doctor`` to patch a process with a given patch
+When a user asks ``libcare-ctl`` to patch a process with a given patch
 (or a directory with patches), the patcher (let's call it ``doctor``) first
 attaches to the threads to be patched (let's call it ``patient``) thus
 stopping their execution.

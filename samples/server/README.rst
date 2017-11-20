@@ -109,11 +109,11 @@ The sample code is in ``samples/server/server.c`` where function
         $ ls patchroot
         2d0e03e41bd82ec8b840a973077932cb2856a5ec.kpatch
 
-7. Apply patch to the running application via `libcare-doctor`_:
+7. Apply patch to the running application via `libcare-ctl`_:
 
    .. code:: console
 
-        $ ../../src/libcare-doctor -v patch -p $(pidof server) patchroot
+        $ ../../src/libcare-ctl -v patch -p $(pidof server) patchroot
         ...
         1 patch hunk(s) have been successfully applied to PID '31209'
 
@@ -128,4 +128,4 @@ The sample code is in ``samples/server/server.c`` where function
 
 Congratulations on going through this sample! Go on and learn how the magic of
 `libcare-patch-make`_ script works, read how the patch is `built under the hood`_ and how
-it is applied by the `libcare-doctor`_. Or even jump to our `hacking guide`_!
+it is applied by the `libcare-ctl`_. Or even jump to our `hacking guide`_!

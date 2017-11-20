@@ -1,5 +1,5 @@
 
-DOCS := internals.pdf libcare-patch-make.pdf libcare-doctor.pdf
+DOCS := internals.pdf libcare-patch-make.pdf libcare-src.pdf
 
 all: $(DOCS)
 
