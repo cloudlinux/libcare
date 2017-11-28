@@ -210,6 +210,11 @@ static void get_full_reg(kpstr_t *t, char *dstreg)
 				last = '\0';
 			/* FALLTHROUGH */
 		default:
+                        if (t->l == 3) {  // Is %rN
+                                dstreg[2] = t->s[2];
+                                dstreg[3] = 0;
+                                return;
+                        }
 			dstreg[2] = prev;
 			dstreg[3] = last;
 			break;
