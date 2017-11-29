@@ -411,12 +411,20 @@ static struct {
 	{ "warn_slowpath_null", "esi" },
 	{ "warn_slowpath_fmt", "esi" },
 	{ "warn_slowpath_fmt_taint", "esi" },
+
+	{ "object_dynamic_cast_assert@PLT", "ecx" },
+	{ "object_class_dynamic_cast_assert@PLT", "ecx" },
+	{ "error_setg_internal@PLT", "edx" },
+	{ "error_setg_errno_internal@PLT", "edx" },
+	{ "g_assertion_message_expr@PLT", "edx" },
+	{ "__assert_fail@PLT", "edx" },
+	{ "__assert_fail@PLT", "dx" },
 };
 
 static inline int get_mov_const_reg(const char *s, char *regname)
 {
 	/* Extract register name ignoring the line number. */
-	return sscanf(s, " movl $%*i, %%%31[a-zA-Z0-9]", regname);
+	return sscanf(s, " mov%*c $%*i, %%%31[a-zA-Z0-9]", regname);
 }
 
 /*
