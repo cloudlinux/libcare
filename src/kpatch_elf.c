@@ -59,10 +59,11 @@ kpatch_elf_object_set_ehdr(struct object_file *o,
 	if (bufsize < sizeof(o->ehdr))
 		return 0;
 
-	kpdebug("buf = %x%x%x%x\n", buf[0], buf[1], buf[2], buf[3]);
 
-	if (memcmp(buf, ELFMAG, SELFMAG))
+	if (memcmp(buf, ELFMAG, SELFMAG)) {
+		kpdebug("magic(%s) = %x%x%x%x\n", o->name, buf[0], buf[1], buf[2], buf[3]);
 		return -1;
+	}
 
 	memcpy(&o->ehdr, buf, sizeof(o->ehdr));
 
