@@ -401,11 +401,64 @@ void add_comm_cmd(struct kp_file *fout, struct kp_file *f, int l, int flags)
 
 /* -------------------------------------- code blocks matching ----------------------------------------- */
 
+#define ARRAY_SIZE(x)	(sizeof(x) / sizeof(x[0]))
+
+static struct {
+	char *funcname;
+	char *regname;
+} lineno_functions[] = {
+	/* A list of pairs { "functioname", "expected register" } */
+	{ "warn_slowpath_null", "esi" },
+	{ "warn_slowpath_fmt", "esi" },
+	{ "warn_slowpath_fmt_taint", "esi" },
+
+	{ "object_dynamic_cast_assert@PLT", "ecx" },
+	{ "object_class_dynamic_cast_assert@PLT", "ecx" },
+	{ "error_setg_internal@PLT", "edx" },
+	{ "error_setg_errno_internal@PLT", "edx" },
+	{ "g_assertion_message_expr@PLT", "edx" },
+	{ "__assert_fail@PLT", "edx" },
+	{ "__assert_fail@PLT", "dx" },
+};
+
+static inline int get_mov_const_reg(const char *s, char *regname)
+{
+	/* Extract register name ignoring the line number. */
+	return sscanf(s, " mov%*c $%*i, %%%31[a-zA-Z0-9]", regname);
+}
+
+/*
+ * Extracts register names from `movl $const, %reg` operations of both lines
+ * and returns bit mask with possible function names to match.
+ */
+static int get_possible_lineno_funcs(const char *s0, const char *s1)
+{
+	int i, try = 0;
+	char regname0[32], regname1[32];
+
+	if (ARRAY_SIZE(lineno_functions) > sizeof(try) * 8)
+		kpfatal("get_possible_lineno_funcs return value overflow");
+
+	if (!get_mov_const_reg(s0, regname0) ||
+	    !get_mov_const_reg(s1, regname1))
+		return 0;
+
+	if (strcmp(regname0, regname1))
+		return 0;
+
+	for (i = 0; i < ARRAY_SIZE(lineno_functions); i++) {
+		if (!strcmp(regname0, lineno_functions[i].regname))
+			try |= (1 << i);
+	}
+
+	return try;
+}
+
 /* this is a minor improvement to avoid function patching just because of code line numbers are screwed, but real function hasn't changed */
-static int match_warn_once(struct cblock *b0, int *p0, struct cblock *b1, int *p1)
+static int match_lineno_func(struct cblock *b0, int *p0, struct cblock *b1, int *p1)
 {
 	char *s0, *s1;
-	int i0 = *p0, i1 = *p1;
+	int i0 = *p0, i1 = *p1, i, possible_funcs;
 	kpstr_t xs0, xs1;
 
 	/* WARN_ONCE() generates a code with __LINE__ inside, so it easily leads to difference even in functions not really changed */
@@ -416,63 +469,70 @@ static int match_warn_once(struct cblock *b0, int *p0, struct cblock *b1, int *p
 	 * call warn_slowpath_XXX
 	 */
 
-	if (i0 + 5 >= b0->end || i1 + 5 >= b1->end)
-		return 0;
-
-	/* match movl $const, %esi */
+	/* the lines that differ are guaranteed to be present in files */
 	s0 = cline(b0->f, i0++); s1 = cline(b1->f, i1++);
-	get_token(&s0, &xs0); get_token(&s1, &xs1);
-	if (kpstrcmpz(&xs0, "movl") || kpstrcmpz(&xs1, "movl"))
+
+	/* what functions should we expect called for these registers, if any? */
+	possible_funcs = get_possible_lineno_funcs(s0, s1);
+	if (!possible_funcs)
 		return 0;
 
-	get_token(&s0, &xs0); get_token(&s1, &xs1);
-	if (xs0.s[0] != '$' || xs1.s[0] != '$')
-		return 0;
+	/*
+	 * Just in case, it's better to keep the search distance as small as
+	 * possible.  Usually, call to warn_slowpath* is within 6 next lines
+	 * (~99% of warnings in vmlinux), but in some functions that are better
+	 * left unpatched there are warnings with quite a large number of
+	 * arguments (e.g. tcp_recvmsg on 2.6.32 kernels has 15 lines between
+	 * saving line-number and calling warn_slowpath_fmt).
+	 */
+	for (i = 0; i < 15; i++, i0++, i1++) {
+		if (i0 >= b0->end || i1 >= b1->end)
+			return 0;
+		s0 = cline(b0->f, i0); s1 = cline(b1->f, i1);
 
-	get_token(&s0, &xs0); get_token(&s1, &xs1);
-	if (!isdigit(xs0.s[0]) || !isdigit(xs1.s[0]))
-		return 0;
+		/*
+		 * There are cases of several instructions saving constant value
+		 * to %reg in 5-6 lines before the call to the appropriate
+		 * function.  Which means that the one saving warning's line
+		 * number is probably the last one, and not the one passed to
+		 * match_lineno_func(). Clear the matching functions from the
+		 * list of our variants.
+		 */
+		possible_funcs &= ~get_possible_lineno_funcs(s0, s1);
+		if (!possible_funcs)
+			return 0;
 
-	get_token(&s0, &xs0); get_token(&s1, &xs1);
-	if (xs0.s[0] != ',' || xs1.s[0] != ',')
-		return 0;
+		/* no diffs allowed between line number saving and the call */
+		if (strcmp_after_rename(b0->f, b1->f, s0, s1))
+			return 0;
 
-	get_token(&s0, &xs0); get_token(&s1, &xs1);
-	if (kpstrcmpz(&xs0, "%esi") || kpstrcmpz(&xs1, "%esi"))
-		return 0;
+		get_token(&s0, &xs0); get_token(&s1, &xs1);
+		if (!kpstrcmpz(&xs0, "call"))
+			goto call;
+	}
 
-	s0 = cline(b0->f, i0++); s1 = cline(b1->f, i1++);
-	get_token(&s0, &xs0); get_token(&s1, &xs1);
-	if (!kpstrcmpz(&xs0, "call"))
-		goto call;
-	if (strcmp_after_rename(b0->f, b1->f, s0, s1))
-		return 0;
+	return 0;
 
-	s0 = cline(b0->f, i0++); s1 = cline(b1->f, i1++);
-	get_token(&s0, &xs0); get_token(&s1, &xs1);
-	if (!kpstrcmpz(&xs0, "call"))
-		goto call;
-	if (strcmp_after_rename(b0->f, b1->f, s0, s1))
-		return 0;
-
-	s0 = cline(b0->f, i0++); s1 = cline(b1->f, i1++);
-	get_token(&s0, &xs0); get_token(&s1, &xs1);
-	if (!kpstrcmpz(&xs0, "call"))
-		goto call;
-	if (strcmp_after_rename(b0->f, b1->f, s0, s1))
-		return 0;
-
-	s0 = cline(b0->f, i0++); s1 = cline(b1->f, i1++);
-	get_token(&s0, &xs0); get_token(&s1, &xs1);
 call:
-	if (kpstrcmpz(&xs0, "call") || strcmp_after_rename(b0->f, b1->f, s0, s1))
-		return 0;
 	get_token(&s0, &xs0); get_token(&s1, &xs1);
-	if (kpstrcmpz(&xs0, "warn_slowpath_null") && kpstrcmpz(&xs0, "warn_slowpath_fmt") && kpstrcmpz(&xs0, "warn_slowpath_fmt_taint"))
-		return 0;
+	for (i = 0; i < ARRAY_SIZE(lineno_functions); i++) {
+		if (!(possible_funcs & (1 << i)))
+			continue;
 
-	*p0 = i0; *p1 = i1;
-	return 1;
+		if (kpstrcmpz(&xs0, lineno_functions[i].funcname))
+			continue;
+
+		/*
+		 * Consider all the checked lines "identical" and skip them by
+		 * setting iterators to the number of "call warn_slowpath_*"
+		 * line, they will later get incremented before next
+		 * for-iteration in cblock_cmp().
+		 */
+		*p0 = i0; *p1 = i1;
+		return 1;
+	}
+
+	return 0;
 }
 
 static int match_build_path(struct cblock *b0, int *p0, struct cblock *b1, int *p1)
@@ -664,7 +724,7 @@ static int cblock_cmp(struct cblock *b0, struct cblock *b1, int flags)
 				continue;
 		}
 
-		if (b0->type == CBLOCK_FUNC && match_warn_once(b0, &i0, b1, &i1))
+		if (b0->type == CBLOCK_FUNC && match_lineno_func(b0, &i0, b1, &i1))
 			continue;
 		if (b0->type == CBLOCK_FUNC && match_bug_on(b0, &i0, b1, &i1))
 			continue;
@@ -1488,13 +1548,13 @@ int main(int argc, char **argv)
 			if (k >= 2)
 				kpfatal("only 2 input files must be specified\n");
 			if ((err = read_file(&infile[k], optarg)))
-				kpfatal("Can't read input file: %s\n", strerror(err));
+				kpfatal("Can't read input file '%s': %s\n", optarg, strerror(err));
 			infile[k].id = k;
 			k++;
 			break;
 		case 'o':
 			if ((err = create_file(&outfile, optarg)))
-				kpfatal("Can't open output file: %s\n", strerror(err));
+				kpfatal("Can't open output file '%s': %s\n", optarg, strerror(err));
 			break;
 		case 'O':
 			if (!strcmp(optarg, "rhel5")) os = OS_RHEL5;
