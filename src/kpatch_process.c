@@ -808,6 +808,7 @@ process_get_comm(kpatch_process_t *proc)
 	ret = readlink(path, realpath, sizeof(realpath));
 	if (ret < 0)
 		return -1;
+	realpath[ret] = '\0';
 	bn = basename(realpath);
 	strncpy(path, bn, sizeof(path));
 	if ((c = strstr(path, " (deleted)")))
