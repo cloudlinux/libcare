@@ -172,7 +172,7 @@ test_unpatch_files() {
 			>>$logfile 2>&1 || :
 	fi
 
-	sleep 1
+	sleep 2
 
 	check_result $testname $outfile
 	echo $? >${outfile}_patched
@@ -180,7 +180,7 @@ test_unpatch_files() {
 	$TIME $LIBCARE_DOCTOR -v unpatch-user -p $pid \
 		>$logfile 2>&1 || :
 
-	sleep 1
+	sleep 2
 
 	kill_reap $pid
 }

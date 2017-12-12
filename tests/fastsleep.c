@@ -34,7 +34,7 @@ unsigned int sleep(unsigned int t)
 		.tv_nsec = t * mult % DENOMINATOR
 	};
 
-	nanosleep(&ts, NULL);
+	real_nanosleep(&ts, NULL);
 	return 0;
 }
 
