@@ -381,7 +381,9 @@ static int qemu_cloudlinux_find_coroutines(struct kpatch_process *proc)
 			return i == 0 ? CORO_SEARCH_NEXT : -1;
 		}
 
-		rv = kpatch_process_mem_read(proc, addr, variable->data,
+		rv = kpatch_process_mem_read(proc,
+					     exec_obj->vma_start + addr,
+					     variable->data,
 					     variable->size);
 		if (rv < 0) {
 			kpdebug("FAIL. can't read symbol %s\n", variable->name);
