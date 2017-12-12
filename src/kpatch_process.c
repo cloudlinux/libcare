@@ -1075,7 +1075,7 @@ kpatch_process_init(kpatch_process_t *proc,
 
 	if (process_get_comm(proc))
 		goto out_unlock;
-	if (kpatch_init_coroutine(proc))
+	if (kpatch_coroutines_init(proc))
 		goto out_unlock;
 
 	return 0;
@@ -1110,7 +1110,7 @@ kpatch_process_free(kpatch_process_t *proc)
 		free(hole);
 	}
 
-	kpatch_free_coroutines(proc);
+	kpatch_coroutines_free(proc);
 
 	process_detach(proc);
 	process_destroy_object_files(proc);

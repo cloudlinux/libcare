@@ -131,7 +131,6 @@ struct kpatch_process {
 	/* List of coroutines + ops to manipulate */
 	struct {
 		struct list_head coros;
-		struct kpatch_coro_ops *ops;
 		unw_addr_space_t unwd;
 	} coro;
 

@@ -849,7 +849,7 @@ static int process_patch(int pid, void *_data)
 	if (ret <= 0)
 		goto out_free;
 
-	ret = kpatch_find_coroutines(proc);
+	ret = kpatch_coroutines_find(proc);
 	if (ret < 0)
 		goto out_free;
 
@@ -1124,7 +1124,7 @@ process_unpatch(int pid, void *_data)
 	if (ret < 0)
 		goto out;
 
-	ret = kpatch_find_coroutines(proc);
+	ret = kpatch_coroutines_find(proc);
 	if (ret < 0)
 		goto out;
 
