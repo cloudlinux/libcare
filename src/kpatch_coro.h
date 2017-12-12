@@ -16,15 +16,11 @@ struct kpatch_coro {
 	sigjmp_buf env;
 };
 
-int kpatch_init_coroutine(struct kpatch_process *proc);
+void *_UCORO_create(struct kpatch_coro *coro, pid_t pid);
+void _UCORO_destroy(void *arg);
 
-int kpatch_find_coroutines(struct kpatch_process *proc);
-void kpatch_free_coroutines(struct kpatch_process *proc);
-
-struct kpatch_coro *kpatch_coro_new(struct kpatch_process *proc);
-void kpatch_coro_free(struct kpatch_coro *c);
-
-void *_UCORO_create(struct kpatch_coro *, pid_t);
-void _UCORO_destroy(void *);
+int kpatch_coroutines_init(struct kpatch_process *proc);
+int kpatch_coroutines_find(struct kpatch_process *proc);
+void kpatch_coroutines_free(struct kpatch_process *proc);
 
 #endif

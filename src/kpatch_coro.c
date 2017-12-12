@@ -15,6 +15,35 @@
 #include "kpatch_ptrace.h"
 #include "kpatch_log.h"
 
+/* Indicates that the next CORO flavours should be tried */
+#define CORO_SEARCH_NEXT	(1<<31)
+
+static struct kpatch_coro *
+kpatch_coro_new(struct kpatch_process *proc)
+{
+	struct kpatch_coro *c;
+
+	c = malloc(sizeof(*c));
+	if (!c)
+		return NULL;
+	memset(c, 0, sizeof(*c));
+	list_init(&c->list);
+	list_add(&c->list, &proc->coro.coros);
+	return c;
+}
+
+static void
+kpatch_coro_free(struct kpatch_coro *c)
+{
+	list_del(&c->list);
+	free(c);
+}
+
+
+/*
+ * Finding coroutines in CentOS7 default QEMU.
+ */
+
 /*
  * The following is UGLY, but here is the thing.
  * QEMU does not maintain a full list of all coroutines.
@@ -187,6 +216,26 @@ static int get_ptr_guard(struct kpatch_process *proc,
 	return 0;
 }
 
+int is_centos7_qemu(struct kpatch_process *proc)
+{
+	struct utsname uts;
+
+	if (uname(&uts))
+		return 0;
+
+	if (strncmp(proc->comm, "qemu-", 5))
+		return 0;
+
+	if (strncmp(uts.release, "3.10.0-", 7))
+		return 0;
+
+	if (!strstr(uts.release, "el7.x86_64"))
+		return 0;
+
+	return 1;
+};
+
+
 static int qemu_centos7_find_coroutines(struct kpatch_process *proc)
 {
 	struct object_file *oheap, *tcmalloc;
@@ -196,6 +245,9 @@ static int qemu_centos7_find_coroutines(struct kpatch_process *proc)
 	unsigned long __start_context, ptr_guard, cur;
 	int ret;
 
+	if (!is_test_target(proc, "fail_coro") && !is_centos7_qemu(proc))
+		return CORO_SEARCH_NEXT;
+
 	kpdebug("Looking for coroutines in QEMU %d...\n", proc->pid);
 	oheap = kpatch_process_get_obj_by_regex(proc, "^\\[heap\\]$");
 	tcmalloc = kpatch_process_get_obj_by_regex(proc, "^libtcmalloc.*\\.so\\.4.*");
@@ -203,6 +255,7 @@ static int qemu_centos7_find_coroutines(struct kpatch_process *proc)
 		kpdebug("FAIL. Can't find [heap](%p)\n", oheap);
 		return -1;
 	}
+
 	/* NOTE(pboldin) We accurately craft stack for test so we
 	 * don't need tcmalloc installed and used
 	 */
@@ -216,7 +269,7 @@ static int qemu_centos7_find_coroutines(struct kpatch_process *proc)
 	ret = locate_start_context_symbol(proc, &__start_context);
 	if (ret < 0) {
 		kpdebug("FAIL. Can't locate_start_context_symbol\n");
-		return -1;
+		return CORO_SEARCH_NEXT;
 	}
 
 	ret = get_ptr_guard(proc, &ptr_guard);
@@ -274,34 +327,9 @@ static int qemu_centos7_find_coroutines(struct kpatch_process *proc)
 	return ret;
 }
 
-static struct kpatch_coro_ops qemu_centos7_ops = {
-	qemu_centos7_find_coroutines,
-};
-
-typedef struct kpatch_coro_ops (*(*kpatch_coro_probe)(struct kpatch_process *proc));
-
-static struct kpatch_coro_ops *qemu_centos7_probe(struct kpatch_process *proc)
-{
-	struct utsname uts;
-
-	if (uname(&uts))
-		return NULL;
-
-	if (is_test_target(proc, "fail_coro"))
-		return &qemu_centos7_ops;
-
-	if (strncmp(proc->comm, "qemu-", 5))
-		return NULL;
-
-	if (strncmp(uts.release, "3.10.0-", 7))
-		return NULL;
-
-	if (!strstr(uts.release, "el7.x86_64"))
-		return NULL;
-
-	return &qemu_centos7_ops;
-};
-
+/*
+ * Finding coroutines in CentOS7 QEMU LibCare enabled.
+ */
 static int qemu_cloudlinux_find_coroutines(struct kpatch_process *proc)
 {
 	int rv, i;
@@ -332,6 +360,9 @@ static int qemu_cloudlinux_find_coroutines(struct kpatch_process *proc)
 	};
 	struct object_file *exec_obj;
 
+	if (!is_test_target(proc, "fail_coro_listed") && !is_centos7_qemu(proc))
+		return CORO_SEARCH_NEXT;
+
 	exec_obj = kpatch_process_get_obj_by_regex(proc, proc->comm);
 	if (exec_obj == NULL) {
 		kpdebug("FAIL. Can't find main object\n");
@@ -347,10 +378,12 @@ static int qemu_cloudlinux_find_coroutines(struct kpatch_process *proc)
 							     &addr);
 		if (rv < 0) {
 			kpdebug("FAIL. Can't find symbol %s\n", variable->name);
-			return -1;
+			return i == 0 ? CORO_SEARCH_NEXT : -1;
 		}
 
-		rv = kpatch_process_mem_read(proc, addr, variable->data,
+		rv = kpatch_process_mem_read(proc,
+					     exec_obj->vma_start + addr,
+					     variable->data,
 					     variable->size);
 		if (rv < 0) {
 			kpdebug("FAIL. can't read symbol %s\n", variable->name);
@@ -404,25 +437,32 @@ static int qemu_cloudlinux_find_coroutines(struct kpatch_process *proc)
 	return 0;
 }
 
-static struct kpatch_coro_ops qemu_cloudlinux_ops = {
-	qemu_cloudlinux_find_coroutines,
-};
-
-static struct kpatch_coro_ops *qemu_cloudlinux_probe(struct kpatch_process *proc)
+static int fail_if_uses_coroutines(struct kpatch_process *proc)
 {
-	/* TODO(pboldin): check presence of our variables */
-	if (is_test_target(proc, "fail_coro_listed"))
-		return &qemu_cloudlinux_ops;
+	/* TODO(pboldin): check whether `makecontext`, `setjmp` or another
+	 * coroutine-related functions are used and fail then.
+	 */
+	if (is_test_target(proc, "fail_coro_listed") ||
+	    is_test_target(proc, "fail_coro") ||
+	    is_centos7_qemu(proc)) {
+		kperr("Process %s(%d) uses coroutines but we were unable to find them\n",
+		      proc->comm, proc->pid);
+		return -1;
+	}
 
-	if (strncmp(proc->comm, "qemu-", 5))
-		return NULL;
-
-	return &qemu_cloudlinux_ops;
+	return 0;
 }
 
-static kpatch_coro_probe kpatch_coro_probes[] = {
-	qemu_centos7_probe,
-	qemu_cloudlinux_probe,
+static struct kpatch_coro_ops kpatch_coro_flavours[] = {
+	{
+		.find_coroutines = qemu_cloudlinux_find_coroutines
+	},
+	{
+		.find_coroutines = qemu_centos7_find_coroutines
+	},
+	{
+		.find_coroutines = fail_if_uses_coroutines,
+	},
 };
 
 
@@ -498,8 +538,9 @@ void _UCORO_destroy(void *arg)
 	_UPT_destroy(info);
 }
 
-int _UCORO_access_reg(unw_addr_space_t as, unw_regnum_t reg, unw_word_t *val,
-		int write, void *arg)
+static int
+_UCORO_access_reg(unw_addr_space_t as, unw_regnum_t reg, unw_word_t *val,
+		      int write, void *arg)
 {
 	struct UCORO_info *info = (struct UCORO_info *)arg;
 	unsigned long *regs = (unsigned long *)info->coro->env[0].__jmpbuf;
@@ -536,24 +577,16 @@ static unw_accessors_t _UCORO_accessors = {
 	_UPT_get_proc_name,
 };
 
-int kpatch_init_coroutine(struct kpatch_process *proc)
+int kpatch_coroutines_init(struct kpatch_process *proc)
 {
-	kpatch_coro_probe probe;
-	int i;
-
-	proc->coro.ops = NULL;
 	proc->coro.unwd = NULL;
 
 	list_init(&proc->coro.coros);
+
 	/* Freshly started binary can't have coroutines */
 	if (proc->is_just_started)
 		return 0;
-	for (i = 0; i < ARRAY_SIZE(kpatch_coro_probes); i++) {
-		probe = kpatch_coro_probes[i];
-		proc->coro.ops = probe(proc);
-		if (proc->coro.ops)
-			break;
-	}
+
 	proc->coro.unwd = unw_create_addr_space(&_UCORO_accessors, __LITTLE_ENDIAN);
 	if (!proc->coro.unwd) {
 		kplogerror("Can't create libunwind address space\n");
@@ -562,14 +595,27 @@ int kpatch_init_coroutine(struct kpatch_process *proc)
 	return 0;
 }
 
-int kpatch_find_coroutines(struct kpatch_process *proc)
+int kpatch_coroutines_find(struct kpatch_process *proc)
 {
-	if (!proc->coro.ops)
+	int i, rv;
+
+	/* Freshly started binary can't have coroutines */
+	if (proc->is_just_started)
 		return 0;
-	return proc->coro.ops->find_coroutines(proc);
+
+	for (i = 0; i < ARRAY_SIZE(kpatch_coro_flavours); i++) {
+		struct kpatch_coro_ops *ops = &kpatch_coro_flavours[i];
+
+		rv = ops->find_coroutines(proc);
+		if (rv == CORO_SEARCH_NEXT)
+			continue;
+
+		return rv;
+	}
+	return 0;
 }
 
-void kpatch_free_coroutines(struct kpatch_process *proc)
+void kpatch_coroutines_free(struct kpatch_process *proc)
 {
 	struct kpatch_coro *c, *tmp;
 
@@ -577,26 +623,6 @@ void kpatch_free_coroutines(struct kpatch_process *proc)
 		unw_destroy_addr_space(proc->coro.unwd);
 
 	list_for_each_entry_safe(c, tmp, &proc->coro.coros, list) {
-		list_del(&c->list);
-		free(c);
+		kpatch_coro_free(c);
 	}
-}
-
-struct kpatch_coro *kpatch_coro_new(struct kpatch_process *proc)
-{
-	struct kpatch_coro *c;
-
-	c = malloc(sizeof(*c));
-	if (!c)
-		return NULL;
-	memset(c, 0, sizeof(*c));
-	list_init(&c->list);
-	list_add(&c->list, &proc->coro.coros);
-	return c;
-}
-
-void kpatch_coro_free(struct kpatch_coro *c)
-{
-	list_del(&c->list);
-	free(c);
 }
