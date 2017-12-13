@@ -10,6 +10,8 @@
 #include <sys/mman.h>
 #include <sys/vfs.h>
 #include <sys/stat.h>
+#include <sys/socket.h>
+#include <sys/un.h>
 
 #include <gelf.h>
 #include <libunwind.h>
@@ -1360,6 +1362,140 @@ int cmd_info_user(int argc, char *argv[])
 	return processes_info(pid, buildid, storagepath, regexp);
 }
 
+
+/* Server part. Used as a start-up notification listener. */
+#define SERVER_STOP	(1<<31)
+
+static char storage_dir[PATH_MAX] = "/var/lib/libcare";
+
+static int
+handle_client(int fd)
+{
+	ssize_t off = 0, r;
+	char msg[128];
+	int rv, pid;
+	char pid_str[64], send_fd_str[64];
+	char *patch_pid_argv[] = {
+		"patch",
+		"-s",
+		"-p",
+		pid_str,
+		"-r",
+		send_fd_str,
+		storage_dir
+	};
+
+	do {
+		r = recv(fd, msg + off, sizeof(msg) - off, 0);
+		if (r == -1 && errno == EINTR)
+			continue;
+
+		if (r == 0)
+			goto out_close;
+		off += r;
+	} while (off < sizeof(msg) &&
+		 (off < 2 ||
+		  msg[off - 2] != '\0' ||
+		  msg[off - 1] != '\0'));
+
+	if (strcmp(msg, "startup")) {
+		kperr("client sent corrupted data, expected 'startup', got %s\n",
+		      msg);
+		goto out_close;
+	}
+
+	rv = sscanf(msg + sizeof("startup"), "%d", &pid);
+	if (rv != 1) {
+		kperr("can't parse pid from %s", msg);
+		goto out_close;
+	}
+
+	sprintf(pid_str, "%d", pid);
+	sprintf(send_fd_str, "%d", fd);
+
+	optind = 1;
+	rv = cmd_patch_user(ARRAY_SIZE(patch_pid_argv), patch_pid_argv);
+	if (rv < 0)
+		kperr("can't patch pid %d\n", pid);
+
+	return 0;
+
+out_close:
+	close(fd);
+	return 0;
+}
+
+
+static int usage_server(const char *err)
+{
+	if (err)
+		fprintf(stderr, "err: %s\n", err);
+	fprintf(stderr, "usage: libcare-ctl server <UNIX socket> [STORAGE ROOT]\n");
+	return -1;
+}
+
+#define LISTEN_BACKLOG 1
+static int
+cmd_server(int argc, char *argv[])
+{
+	int sfd = -1, cfd, sockaddr_len, rv;
+	const char *unixsocket;
+	struct sockaddr_un sockaddr;
+
+	if (argc < 2)
+		return usage_server("UNIX socket argument is missing");
+
+	unixsocket = argv[1];
+
+	if (argc >= 3)
+		strcpy(storage_dir, argv[2]);
+
+	memset(&sockaddr, 0, sizeof(sockaddr));
+	sockaddr.sun_family = AF_UNIX;
+	sockaddr_len = strlen(unixsocket) + 1;
+	if (sockaddr_len >= sizeof(sockaddr.sun_path)) {
+		kperr("sockaddr is too long\n");
+		return -1;
+	}
+
+	strncpy(sockaddr.sun_path, unixsocket, sizeof(sockaddr.sun_path));
+	if (unixsocket[0] == '\n')
+		sockaddr.sun_path[0] = '\0';
+
+	sockaddr_len += sizeof(sockaddr.sun_family);
+
+	sfd = socket(AF_UNIX, SOCK_STREAM, 0);
+	if (sfd == -1)
+		goto err_close;
+
+	rv = bind(sfd, (struct sockaddr *)&sockaddr,
+		  sockaddr_len);
+	if (rv == -1)
+		goto err_close;
+
+	rv = listen(sfd, LISTEN_BACKLOG);
+	if (rv == -1)
+		goto err_close;
+
+	while ((cfd = accept4(sfd, NULL, 0, SOCK_CLOEXEC)) >= 0) {
+		rv = handle_client(cfd);
+		if (rv < 0)
+			kplogerror("server error\n");
+
+		(void) close(cfd);
+		if (rv == SERVER_STOP)
+			break;
+	}
+
+err_close:
+	if (rv < 0)
+		kplogerror("can't listen on unix socket %s\n", unixsocket);
+	if (sfd != -1)
+		close(sfd);
+	return rv;
+}
+
+
 /*****************************************************************************
  * Utilities.
  ****************************************************************************/
@@ -1415,6 +1551,7 @@ static int usage(const char *err)
 	fprintf(stderr, "  patch  - apply patch to a user-space process\n");
 	fprintf(stderr, "  unpatch- unapply patch from a user-space process\n");
 	fprintf(stderr, "  info   - show info on applied patches\n");
+	fprintf(stderr, "  server - listen on a unix socket for commands\n");
 	return -1;
 }
 
@@ -1436,13 +1573,13 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	cmd = argv[optind];
 	argc -= optind;
 	argv += optind;
 
 	if (argc < 1)
 		return usage("not enough arguments.");
 
+	cmd = argv[0];
 	optind = 1;
 	if (!strcmp(cmd, "patch") || !strcmp(cmd, "patch-user"))
 		return cmd_patch_user(argc, argv);
@@ -1450,6 +1587,8 @@ int main(int argc, char *argv[])
 		return cmd_unpatch_user(argc, argv);
 	else if (!strcmp(cmd, "info") || !strcmp(cmd, "info-user"))
 		return cmd_info_user(argc, argv);
+	else if (!strcmp(cmd, "server"))
+		return cmd_server(argc, argv);
 	else
 		return usage("unknown command");
 }

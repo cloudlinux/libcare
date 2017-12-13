@@ -107,9 +107,11 @@ _run_tests() {
 kp_patch_test() {
 	_install_originals
 
-	KPATCH_TOOLS=/libcare/src		\
-	PATCH_ROOT=/root/${KP_PROJECT_PATCH%.*} \
-		/libcare/tests/execve/listener >/root/test.log 2>&1 & :
+	rm -f /var/run/libcare.sock
+
+	PATCH_ROOT=/root/${KP_PROJECT_PATCH%.*}
+	/libcare/src/libcare-ctl -v server /var/run/libcare.sock $PATCH_ROOT \
+		>/root/test.log 2>&1 & :
 	LISTENER_PID=$!
 
 	pushd $KP_PROJECT_BUILD_DIR

@@ -17,8 +17,7 @@
 #include <string.h>
 
 #include <sys/socket.h>
-#include <netinet/in.h>
-#include <netinet/tcp.h>
+#include <sys/un.h>
 
 #include <fnmatch.h>
 
@@ -74,32 +73,41 @@ static void
 notify_listener(void)
 {
 	int sock, rv;
-	struct sockaddr_in sockaddr;
-	pid_t pid;
+	struct sockaddr_un sockaddr;
+	const char *unix_path = "/var/run/libcare.sock";
+	char buf[128], *p;
 
-	sock = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
+	sock = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
 	if (sock == -1) {
 		dprintf("socket() error: %s(%d)\n", strerror(errno), errno);
 		return;
 	}
 	dprintf("socket()\n");
 
-	sockaddr.sin_family = AF_INET;
-	sockaddr.sin_port = htons(4233);
-	sockaddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+	p = getenv("LIBCARE_CTL_UNIX");
+	if (p)
+		unix_path = p;
 
-	rv = connect(sock, &sockaddr, sizeof(sockaddr));
+	sockaddr.sun_family = AF_UNIX;
+	strncpy(sockaddr.sun_path, unix_path, sizeof(sockaddr.sun_path));
+
+	rv = connect(sock, (const struct sockaddr *)&sockaddr, sizeof(sockaddr));
 	if (rv == -1) {
-		fprintf(stderr, "connect() error: %s(%d)\n", strerror(errno), errno);
+		fprintf(stderr, "libcare-execve: connect() error: %s(%d)\n", strerror(errno), errno);
 		(void) close(sock);
 		return;
 	}
 	dprintf("connect()\n");
 
 	/* TODO: handle multi-threading apps running execve */
-	pid = getpid();
+	p = stpcpy(buf, "startup") + 1;
+	sprintf(p, "%d", getpid());
+	p += strlen(p) + 1;
+	*p = '\0';
+	p++;
+
 	do {
-		rv = send(sock, &pid, sizeof(pid), 0);
+		rv = send(sock, buf, p - buf, 0);
 	} while (rv == -1 && errno == EINTR);
 
 	if (rv == -1) {
@@ -110,7 +118,7 @@ notify_listener(void)
 	dprintf("send()\n");
 
 	do {
-		rv = recv(sock, &pid, sizeof(pid), 0);
+		rv = recv(sock, buf, sizeof(int), 0);
 	} while (rv == -1 && errno == EINTR);
 
 	if (rv == -1) {

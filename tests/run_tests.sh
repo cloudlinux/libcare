@@ -259,10 +259,12 @@ test_patch_startup_init_execve() {
 	export KP_EXECVE_PATTERN="$PWD/*/$DESTDIR/*"
 	export KP_EXECVE_PATTERN_PATHNAME=1
 	export LD_PRELOAD="$PWD/execve/execve.so"
-	export PATCH_ROOT="$PWD/$DESTDIR-patchroot"
+
+	export LIBCARE_CTL_UNIX=$(mktemp -d)/test.sock
+	PATCH_ROOT="$PWD/$DESTDIR-patchroot"
 
 	kcare_genl_sink_log=$(mktemp --tmpdir)
-	./execve/listener >$kcare_genl_sink_log 2>&1 & :
+	../src/libcare-ctl -v server $LIBCARE_CTL_UNIX $PATCH_ROOT >$kcare_genl_sink_log 2>&1 & :
 	GENL_SINK_PID=$!
 	KILL_SUDO=0
 }

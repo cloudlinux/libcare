@@ -20,13 +20,6 @@ binary takes control over the process.
 .. _`libcare-ctl`: ../../docs/libcare-ctl.rst
 
 
-``listener.c``
---------------
-
-The ``listener.c`` is the code that listens on the port 4233 and waits for
-incoming pids. It then invokes `libcare-ctl`_ with arguments specifying that
-pid and incoming socket's file descriptor that is inherited.
-
 ``libcare-ctl`` part
 -----------------------
 

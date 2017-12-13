@@ -1,11 +1,8 @@
 
-all: execve.so listener
+all: execve.so
 
 clean:
-	rm -f execve.so listener
+	rm -f execve.so
 
 execve.so: execve.c
 	$(LINK.c) -o $@ $< -shared -fPIC -ldl
-
-listener: listener.c
-	$(LINK.c) -o $@ $<
