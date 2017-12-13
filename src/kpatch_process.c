@@ -1065,6 +1065,7 @@ kpatch_process_init(kpatch_process_t *proc,
 	proc->fdmaps = fdmaps;
 	proc->is_just_started = is_just_started;
 	proc->send_fd = send_fd;
+	proc->memfd = -1;
 
 	list_init(&proc->ptrace.pctxs);
 	list_init(&proc->objs);
