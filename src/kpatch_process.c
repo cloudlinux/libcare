@@ -206,8 +206,7 @@ process_add_object_vma(kpatch_process_t *proc,
 		/* Is not a kpatch, look if this is a vm_area of an already
 		 * enlisted object.
 		 */
-		list_for_each_entry_reverse(o,
-					       &proc->objs, list) {
+		list_for_each_entry_reverse(o, &proc->objs, list) {
 			if ((dev && inode && o->dev == dev &&
 			     o->inode == inode) ||
 			    (dev == 0 && !strcmp(o->name, name))) {
@@ -608,8 +607,7 @@ process_has_thread_pid(kpatch_process_t *proc, int pid)
 {
 	struct kpatch_ptrace_ctx *pctx;
 
-	list_for_each_entry(pctx,
-			       &proc->ptrace.pctxs, list)
+	list_for_each_entry(pctx, &proc->ptrace.pctxs, list)
 		if (pctx->pid == pid)
 			return 1;
 
