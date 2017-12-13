@@ -9,7 +9,7 @@ KP_PROJECT_SPEC=glibc.spec
 KP_PROJECT_DIR=$KP_PROJECT_BUILD_ROOT/BUILD/glibc-2.17-c758a686
 KP_PROJECT_BUILD_DIR=$KP_PROJECT_DIR/build-x86_64-redhat-linux
 
-KP_PROJECT_SOURCE_URL=ftp://bo.mirror.garr.it/2/scientific/7x/SRPMS/vendor/glibc-2.17-55.el7.src.rpm
+KP_PROJECT_SOURCE_URL=http://vault.centos.org/7.0.1406/os/Source/SPackages/glibc-2.17-55.el7.src.rpm
 KP_PROJECT_SOURCE=glibc-2.17-55.el7.src.rpm
 KP_PROJECT_BINARY=glibc-2.17-55.el7.$ARCH.rpm
 
