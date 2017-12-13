@@ -641,8 +641,8 @@ kpatch_process_attach(kpatch_process_t *proc)
 				prevnpids - npids);
 		}
 
-		if (proc->is_just_started && npids > 1) {
-			kperr("ERROR: is_just_started && nr > 1\n");
+		if (proc->is_just_started && npids > 1 && proc->send_fd == -1) {
+			kperr("ERROR: is_just_started && nr > 1 && proc->send_fd == -1\n");
 			goto dealloc;
 		}
 
@@ -822,50 +822,65 @@ process_get_comm(kpatch_process_t *proc)
 	return 0;
 }
 
+static int
+kpatch_process_kickstart_execve_wrapper(kpatch_process_t *proc)
+{
+	int ret;
+
+	ret = kpatch_ptrace_kickstart_execve_wrapper(proc);
+	if (ret < 0)
+		return -1;
+
+	/* TODO(pboldin) race here */
+	unlock_process(proc->pid, proc->fdmaps);
+
+	ret = lock_process(proc->pid);
+	if (ret < 0)
+		return -1;
+	proc->fdmaps = ret;
+
+	ret = process_get_comm(proc);
+	if (ret < 0)
+		return -1;
+
+	printf("kpatch_ctl real cmdline=\"");
+	process_print_cmdline(proc);
+	printf("\"\n");
+
+	return 0;
+}
+
 int
 kpatch_process_load_libraries(kpatch_process_t *proc)
 {
 	unsigned long entry_point;
 	int ret;
-	struct kpatch_ptrace_ctx *pctx = proc2pctx(proc);
 
 	if (!proc->is_just_started)
 		return 0;
 
 	if (proc->send_fd != -1) {
-		ret = kpatch_ptrace_kickstart_execve_wrapper(pctx, proc->send_fd);
+		ret = kpatch_process_kickstart_execve_wrapper(proc);
 		if (ret < 0) {
-			kperr("Unable to kickstart execve");
+			kperr("Unable to kickstart execve\n");
 			return -1;
 		}
-		/* TODO(pboldin) race here */
-		unlock_process(proc->pid, proc->fdmaps);
-
-		ret = lock_process(proc->pid);
-		if (ret < 0)
-			return -1;
-		proc->fdmaps = ret;
-
-		ret = process_get_comm(proc);
-		if (ret < 0)
-			return -1;
-
-		printf("kpatch_ctl real cmdline=\"");
-		process_print_cmdline(proc);
-		printf("\"\n");
 	}
 
 	if (proc->is_ld_linux)
 		ret = kpatch_ptrace_handle_ld_linux(proc, &entry_point);
 	else
-		ret = kpatch_ptrace_get_entry_point(pctx, &entry_point);
+		ret = kpatch_ptrace_get_entry_point(proc2pctx(proc),
+						    &entry_point);
 
 	if (ret < 0) {
 		kperr("unable to find entry point\n");
 		return ret;
 	}
 
-	pctx->execute_until = entry_point;
+	/* Note: kpatch_process_kickstart_execve_wrapper might change
+	 * proc->pctxs */
+	proc2pctx(proc)->execute_until = entry_point;
 	ret = kpatch_ptrace_execute_until(proc, 1000, 0);
 	if (ret < 0) {
 		kperr("unable to run until libraries loaded\n");

@@ -18,6 +18,7 @@
 
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <sys/syscall.h>
 
 #include <fnmatch.h>
 
@@ -99,9 +100,8 @@ notify_listener(void)
 	}
 	dprintf("connect()\n");
 
-	/* TODO: handle multi-threading apps running execve */
 	p = stpcpy(buf, "startup") + 1;
-	sprintf(p, "%d", getpid());
+	sprintf(p, "%d", (int) syscall(SYS_gettid));
 	p += strlen(p) + 1;
 	*p = '\0';
 	p++;

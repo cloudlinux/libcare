@@ -659,21 +659,20 @@ static int
 wait_for_stop(struct kpatch_ptrace_ctx *pctx,
 	      void *data)
 {
-	int ret, status = 0;
-	(void) data;
-	kpdebug("wait_for_stop(pid=%d)\n", pctx->pid);
+	int ret, status = 0, pid = (int)(uintptr_t)data ?: pctx->pid;
+	kpdebug("wait_for_stop(pctx->pid=%d, pid=%d)\n", pctx->pid, pid);
 
 	while (1) {
 		ret = ptrace(PTRACE_CONT, pctx->pid, NULL,
 			     (void *)(uintptr_t)status);
 		if (ret < 0) {
-			kplogerror("can't start tracee - %d\n", pctx->pid);
+			kplogerror("can't start tracee %d\n", pctx->pid);
 			return -1;
 		}
 
-		ret = waitpid(pctx->pid, &status, __WALL);
+		ret = waitpid(pid, &status, __WALL);
 		if (ret < 0) {
-			kplogerror("can't wait tracee - %d\n", pctx->pid);
+			kplogerror("can't wait tracee %d\n", pid);
 			return -1;
 		}
 
@@ -763,19 +762,65 @@ kpatch_execute_remote(struct kpatch_ptrace_ctx *pctx,
 					  NULL);
 }
 
-int
-kpatch_ptrace_kickstart_execve_wrapper(struct kpatch_ptrace_ctx *pctx,
-				       int send_fd)
+/* FIXME(pboldin) buf might be too small */
+static int
+get_threadgroup_id(int tid)
 {
-	int ret;
+	FILE *fh;
+	char buf[256];
+	int pid = -1;
+
+	sprintf(buf, "/proc/%d/status", tid);
+
+	fh = fopen(buf, "r");
+	if (fh == NULL)
+		return -1;
+
+	while (!feof(fh)) {
+		if (fscanf(fh, "Tgid: %d", &pid) == 1)
+			break;
+		fgets(buf, sizeof(buf), fh);
+	}
+
+	fclose(fh);
+	return pid;
+}
+
+/**
+ * This is rather tricky since we are accounting for the non-main
+ * thread calling for execve(). See `ptrace(2)` for details.
+ *
+ * FIXME(pboldin): this is broken for multi-threaded calls
+ * to execve. Sight.
+ */
+int
+kpatch_ptrace_kickstart_execve_wrapper(kpatch_process_t *proc)
+{
+	int ret, pid = 0;
+	struct kpatch_ptrace_ctx *pctx, *ptmp, *execve_pctx = NULL;
 	long rv;
 
 	kpdebug("kpatch_ptrace_kickstart_execve_wrapper\n");
 
+	list_for_each_entry(pctx, &proc->ptrace.pctxs, list) {
+		/* proc->pid equals to THREAD ID of the thread
+		 * executing execve.so's version of execve
+		 */
+		if (pctx->pid != proc->pid)
+			continue;
+		execve_pctx = pctx;
+		break;
+	}
+
+	if (execve_pctx == NULL) {
+		kperr("can't find thread executing execve");
+		return -1;
+	}
+
 	/* Send a message to our `execve` wrapper so it will continue
 	 * execution
 	 */
-	ret = send(send_fd, &ret, sizeof(ret), 0);
+	ret = send(proc->send_fd, &ret, sizeof(ret), 0);
 	if (ret < 0) {
 		kplogerror("send failed\n");
 		return ret;
@@ -783,19 +828,19 @@ kpatch_ptrace_kickstart_execve_wrapper(struct kpatch_ptrace_ctx *pctx,
 
 	/* Wait for it to reach BRKN instruction just before real execve */
 	while (1) {
-		ret = wait_for_stop(pctx, NULL);
+		ret = wait_for_stop(execve_pctx, NULL);
 		if (ret < 0) {
 			kplogerror("wait_for_stop\n");
 			return ret;
 		}
 
-		rv = ptrace(PTRACE_PEEKUSER, pctx->pid,
+		rv = ptrace(PTRACE_PEEKUSER, execve_pctx->pid,
 			    offsetof(struct user_regs_struct, rip),
 			    NULL);
 		if (rv == -1)
 			return rv;
 
-		rv = ptrace(PTRACE_PEEKTEXT, pctx->pid,
+		rv = ptrace(PTRACE_PEEKTEXT, execve_pctx->pid,
 			    rv - 1, NULL);
 		if (rv == -1)
 			return rv;
@@ -803,20 +848,36 @@ kpatch_ptrace_kickstart_execve_wrapper(struct kpatch_ptrace_ctx *pctx,
 			break;
 	}
 
-	/* Wait for SIGTRAP from the execve */
-	ret = wait_for_stop(pctx, NULL);
+	/* Wait for SIGTRAP from the execve. It happens from the thread
+	 * group ID, so find it if thread doing execve() is not it. */
+	if (execve_pctx != proc2pctx(proc)) {
+		pid = get_threadgroup_id(proc->pid);
+		if (pid < 0)
+			return -1;
+
+		proc->pid = pid;
+	}
+
+	ret = wait_for_stop(execve_pctx, (void *)(uintptr_t)pid);
 	if (ret < 0) {
-		kplogerror("wait_for_stop\n");
+		kplogerror("waitpid\n");
 		return ret;
+	}
+
+	list_for_each_entry_safe(pctx, ptmp, &proc->ptrace.pctxs, list) {
+		if (pctx->pid == proc->pid)
+			continue;
+		kpatch_ptrace_detach(pctx);
+		kpatch_ptrace_ctx_destroy(pctx);
 	}
 
 	/* Suddenly, /proc/pid/mem gets invalidated */
 	{
 		char buf[128];
-		close(pctx->proc->memfd);
+		close(proc->memfd);
 
-		snprintf(buf, sizeof(buf), "/proc/%d/mem", pctx->pid);
-		pctx->proc->memfd = open(buf, O_RDWR);
+		snprintf(buf, sizeof(buf), "/proc/%d/mem", proc->pid);
+		proc->memfd = open(buf, O_RDWR);
 	}
 
 	kpdebug("...done\n");
