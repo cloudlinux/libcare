@@ -762,6 +762,9 @@ symbol_resolve(struct object_file *o,
 	case STT_TLS:
 		break;
 
+	case STT_NOTYPE:			// for Systemtap symbol _.stapsdt.base.kpatch
+		break;
+
 	default:
 		kperr("Unsupported symbol type: %d\n", GELF_ST_TYPE(s->st_info));
 		return -1;
