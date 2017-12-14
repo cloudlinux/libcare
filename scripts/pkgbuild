@@ -105,7 +105,11 @@ kp_prepare_source_raw() {
 
 kp_download_source_rpm() {
 	mkdir -p /kcdata
-	curl $KP_PROJECT_SOURCE_URL -o /kcdata/$KP_PROJECT_SOURCE
+	if test -n "$KP_PROJECT_SOURCE_URL"; then
+		curl $KP_PROJECT_SOURCE_URL -o /kcdata/$KP_PROJECT_SOURCE
+	else
+		yumdownloader --source --destdir /kcdata ${KP_PROJECT_SOURCE%.src.rpm}
+	fi
 }
 
 kp_prepare_source_rpm() {
