@@ -1398,6 +1398,11 @@ handle_client(int fd)
 		  msg[off - 2] != '\0' ||
 		  msg[off - 1] != '\0'));
 
+	if (off == sizeof(msg)) {
+		kperr("possible buffer overflow\n");
+		goto out_close;
+	}
+
 	if (strcmp(msg, "startup")) {
 		kperr("client sent corrupted data, expected 'startup', got %s\n",
 		      msg);
