@@ -5,6 +5,7 @@ set -e
 TESTDIR=$(realpath $(dirname $0))
 KPTOOLS=${KPTOOLS-$TESTDIR/../src}
 LIBCARE_DOCTOR=$KPTOOLS/libcare-ctl
+LIBCARE_CLIENT=$KPTOOLS/libcare-client
 STAGE=${STAGE-$TESTDIR/stage/tmp}
 
 TIME=$(which time)
@@ -22,33 +23,47 @@ xsudo() {
 	fi
 }
 
-have_ptrace_permissions() {
-	local PTRACE_SCOPE=/proc/sys/kernel/yama/ptrace_scope
-	test $(id -u) -eq 0 && return 0
-	test -n "$(find $LIBCARE_DOCTOR -perm /6000 -uid 0)" && return 0
-	test -f $PTRACE_SCOPE && grep -q 1 $PTRACE_SCOPE && \
-		test -z "$(getcap $LIBCARE_DOCTOR | grep cap_sys_ptrace)" &&
-		return 1
-	return 0
+xrealpath() {
+	if command -v realpath >/dev/null; then
+		realpath $1;
+	else
+		local p=$1
+		local n=
+		while test -L $p; do
+			n="$(ls -l $p | sed 's/.*-> //g')"
+			if test -n "${n##/*}"; then # relative path
+				n="$(dirname $p)/$n"
+			fi
+			p=$n
+		done
+		n="$(dirname $p)"
+		p="$(basename $p)"
+		if test "$n" != "/"; then
+			n="$(xrealpath $n)"
+		else
+			n=""
+		fi
+		echo $n/$p
+	fi
 }
 
-assert_ptrace_permissions() {
+run() {
+	local cmd="$1"
+	local outfile="$2"
+	local pidfile=$(mktemp --tmpdir)
 
-	if have_ptrace_permissions; then
-		return
-	fi
-
-	cat <<EOF
-Not enough permissions for kpatch.
-
-Either run as root, or enable ptrace either globally or by
-\`sudo setcap cap_sys_ptrace+ep $LIBCARE_DOCTOR\`.
-EOF
-	exit 1
+	$LIBCARE_CLIENT $SOCKPATH run "exec env $RUN_ARGS LD_PRELOAD=$LD_PRELOAD $cmd >$outfile 2>&1" >$pidfile
+	read pid <$pidfile
+	wait_file $outfile
+	echo "pid=$pid"
 }
 
 kill_reap() {
 	local pid=$1
+	$LIBCARE_CLIENT $SOCKPATH kill $pid
+
+	return 0
+
 	if ! kill -0 $pid 2>/dev/null; then
 		wait $pid 2>/dev/null
 		return $?
@@ -64,8 +79,24 @@ kill_reap() {
 	return $result
 }
 
+libcare_ctl() {
+	$TIME $LIBCARE_CLIENT $SOCKPATH "$@"
+}
+
 grep_tail() {
 	tail -n2 $outfile | grep -qi "$@"
+}
+
+
+common_init() {
+	SOCKPATH=$(mktemp --tmpdir -d)/test.sock
+	$LIBCARE_DOCTOR -v server $SOCKPATH & :
+	SERVER_PID=$!
+	echo "SERVER_PID=$SERVER_PID"
+}
+
+common_fini() {
+	kill $SERVER_PID
 }
 
 CHECK_RESULT=check_result
@@ -110,19 +141,17 @@ test_patch_files() {
 	local kpatch_file=$testname/$DESTDIR/${testname}.kpatch
 	local kpatch_so_file=$testname/$DESTDIR/lib${testname}.so.kpatch
 
-	LD_LIBRARY_PATH=$testname/$DESTDIR \
+	run "LD_LIBRARY_PATH=$testname/$DESTDIR \
 		stdbuf -o 0 \
-		$PWD/$testname/$DESTDIR/$testname >$outfile 2>&1 & :
-	local pid=$!
-	wait_file $outfile
+		$PWD/$testname/$DESTDIR/$testname" $outfile
 
 	if test -f $kpatch_file; then
-		$TIME $LIBCARE_DOCTOR -v patch-user -p $pid $kpatch_file \
+		libcare_ctl patch-user -p $pid $kpatch_file \
 			>$logfile 2>&1 || :
 	fi
 
 	if test -f $kpatch_so_file; then
-		$TIME $LIBCARE_DOCTOR -v patch-user -p $pid $kpatch_so_file \
+		libcare_ctl patch-user -p $pid $kpatch_so_file \
 			>>$logfile 2>&1 || :
 	fi
 
@@ -155,29 +184,27 @@ test_unpatch_files() {
 	local kpatch_file=$testname/$DESTDIR/${testname}.kpatch
 	local kpatch_so_file=$testname/$DESTDIR/lib${testname}.so.kpatch
 
-	LD_LIBRARY_PATH=$testname/$DESTDIR \
+	run "LD_LIBRARY_PATH=$testname/$DESTDIR \
 		stdbuf -o 0 \
-		$testname/$DESTDIR/$testname >$outfile 2>&1 & :
-	local pid=$!
-	wait_file $outfile
+		$testname/$DESTDIR/$testname" $outfile
 
 
 	if test -f $kpatch_file; then
-		$TIME $LIBCARE_DOCTOR -v patch-user -p $pid $kpatch_file \
+		libcare_ctl patch-user -p $pid $kpatch_file \
 			>$logfile 2>&1 || :
 	fi
 
 	if test -f $kpatch_so_file; then
-		$TIME $LIBCARE_DOCTOR -v patch-user -p $pid $kpatch_so_file \
+		libcare_ctl patch-user -p $pid $kpatch_so_file \
 			>>$logfile 2>&1 || :
 	fi
 
-	sleep 2
+	sleep 3
 
 	check_result $testname $outfile
 	echo $? >${outfile}_patched
 
-	$TIME $LIBCARE_DOCTOR -v unpatch-user -p $pid \
+	libcare_ctl unpatch-user -p $pid \
 		>$logfile 2>&1 || :
 
 	sleep 2
@@ -201,14 +228,11 @@ test_patch_dir() {
 
 	local kpatch_dir=$testname/$DESTDIR
 
-	LD_LIBRARY_PATH=$testname/$DESTDIR \
+	run "LD_LIBRARY_PATH=$testname/$DESTDIR \
 		stdbuf -o 0 \
-		$testname/$DESTDIR/$testname >$outfile 2>&1 & :
-	local pid=$!
-	wait_file $outfile
+		$testname/$DESTDIR/$testname" $outfile
 
-	$TIME $LIBCARE_DOCTOR -v patch-user -p $pid $kpatch_dir \
-	>$logfile 2>&1 || :
+	libcare_ctl patch-user -p $pid $kpatch_dir >$logfile || :
 
 	sleep 3
 
@@ -253,20 +277,14 @@ test_patch_startup_init_binfmt() {
 }
 
 test_patch_startup_init_execve() {
-
 	make -C execve
 
-	export KP_EXECVE_PATTERN="$PWD/*/$DESTDIR/*"
-	export KP_EXECVE_PATTERN_PATHNAME=1
-	export LD_PRELOAD="$PWD/execve/execve.so"
+	$LIBCARE_CLIENT $SOCKPATH storage "$PWD/$DESTDIR-patchroot"
 
-	export LIBCARE_CTL_UNIX=$(mktemp -d)/test.sock
-	PATCH_ROOT="$PWD/$DESTDIR-patchroot"
-
-	kcare_genl_sink_log=$(mktemp --tmpdir)
-	../src/libcare-ctl -v server $LIBCARE_CTL_UNIX $PATCH_ROOT >$kcare_genl_sink_log 2>&1 & :
-	GENL_SINK_PID=$!
-	KILL_SUDO=0
+	RUN_ARGS="KP_EXECVE_PATTERN=\"$PWD/*/$DESTDIR/*\" \
+		  KP_EXECVE_PATTERN_PATHNAME=1 \
+		  LIBCARE_CTL_UNIX=$SOCKPATH"
+	LD_PRELOAD="$PWD/execve/execve.so"
 }
 
 GENL_SINK_PID=
@@ -288,11 +306,9 @@ test_patch_startup() {
 	# link logfile to the appropriate file
 	ln -fs $logfile logfile
 
-	LD_LIBRARY_PATH=$testname/$DESTDIR \
+	run "LD_LIBRARY_PATH=$testname/$DESTDIR \
 		stdbuf -o 0 \
-		$PWD/$testname/$DESTDIR/$testname >$outfile 2>&1 & :
-	local pid=$!
-	wait_file $outfile
+		$PWD/$testname/$DESTDIR/$testname" $outfile
 
 	# Start up is patched automagically
 
@@ -316,30 +332,6 @@ test_patch_startup_fini() {
 	fi
 }
 
-xrealpath() {
-	if command -v realpath >/dev/null; then
-		realpath $1;
-	else
-		local p=$1
-		local n=
-		while test -L $p; do
-			n="$(ls -l $p | sed 's/.*-> //g')"
-			if test -n "${n##/*}"; then # relative path
-				n="$(dirname $p)/$n"
-			fi
-			p=$n
-		done
-		n="$(dirname $p)"
-		p="$(basename $p)"
-		if test "$n" != "/"; then
-			n="$(xrealpath $n)"
-		else
-			n=""
-		fi
-		echo $n/$p
-	fi
-}
-
 test_patch_startup_ld_linux_init() {
 	if ! test -f /proc/ucare/applist; then
 		echo "STARTUP LD REQUIRES UCARE MODULE"
@@ -359,13 +351,10 @@ test_patch_startup_ld_linux() {
 	# link logfile to the appropriate file
 	ln -fs $logfile logfile
 
-	LD_LIBRARY_PATH=$testname/$DESTDIR \
+	run "LD_LIBRARY_PATH=$testname/$DESTDIR \
 		$(command -v stdbuf) -o 0 \
 		/lib64/ld-linux-x86-64.so.2 \
-		$PWD/$testname/$DESTDIR/$testname >$outfile 2>&1 & :
-
-	local pid=$!
-	wait_file $outfile
+		$PWD/$testname/$DESTDIR/$testname" $outfile
 
 	# Start up is patched automagically
 
@@ -396,23 +385,20 @@ test_patch_patchlevel() {
 	local outfile=$2
 	local logfile=$3
 
-	LD_LIBRARY_PATH=$testname/build	\
+	run "LD_LIBRARY_PATH=$testname/build	\
 		stdbuf -o 0 \
-		$PWD/$testname/$DESTDIR/$testname >$outfile 2>&1 & :
-
-	local pid=$!
-	wait_file $outfile
+		$PWD/$testname/$DESTDIR/$testname" $outfile
 
 	local kpatch_storage=$PWD/$testname/patchlevel-root
 
 	_set_latest $kpatch_storage 1
-	$TIME $LIBCARE_DOCTOR -v patch-user -p $pid $kpatch_storage \
+	libcare_ctl patch-user -p $pid $kpatch_storage \
 		>$logfile 2>&1 || :
 
 	sleep 2
 
 	_set_latest $kpatch_storage 2
-	$TIME $LIBCARE_DOCTOR -v patch-user -p $pid $kpatch_storage \
+	libcare_ctl patch-user -p $pid $kpatch_storage \
 		>>$logfile 2>&1 || :
 
 	sleep 2
@@ -524,8 +510,6 @@ should_skip() {
 
 
 main() {
-	assert_ptrace_permissions
-
 	export SLEEP_MULT=100000000
 
 	DESTDIR=build
@@ -597,6 +581,7 @@ main() {
 
 	FAILED=""
 
+	common_init
 	${FLAVOR}_init "$TESTS"
 	for tst in $TESTS; do
 		ntotal=$(($ntotal + 1))
@@ -613,6 +598,7 @@ main() {
 		fi
 	done
 	${FLAVOR}_fini
+	common_fini
 
 	echo "OK $nok FAIL $nfailed SKIP $nskipped TOTAL $ntotal"
 	if test -n "$FAILED"; then
