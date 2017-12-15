@@ -359,8 +359,12 @@ overwrite_utils() {
 	ln -fs /libcare/src/libcare-cc $TMPBIN/gcc
 	ln -fs /libcare/src/libcare-cc $TMPBIN/cc
 	ln -fs /libcare/src/libcare-cc $TMPBIN/g++
+	ln -fs /libcare/src/libcare-cc $TMPBIN/c++
 	if ! test -x /usr/bin/g++; then
 		rm -f $TMPBIN/g++
+	fi
+	if ! test -x /usr/bin/c++; then
+		rm -f $TMPBIN/c++
 	fi
 	if ! test -x /usr/bin/gcc; then
 		rm -f $TMPBIN/gcc
