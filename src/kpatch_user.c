@@ -1366,13 +1366,14 @@ int cmd_info_user(int argc, char *argv[])
 /* Server part. Used as a start-up notification listener. */
 #define SERVER_STOP	(1<<31)
 
+static int
+execute_cmd(int argc, char *argv[]);
+
 static char storage_dir[PATH_MAX] = "/var/lib/libcare";
 
 static int
-handle_client(int fd)
+cmd_startup(int fd, int argc, char *argv[])
 {
-	ssize_t off = 0, r;
-	char msg[128];
 	int rv, pid;
 	char pid_str[64], send_fd_str[64];
 	char *patch_pid_argv[] = {
@@ -1384,6 +1385,57 @@ handle_client(int fd)
 		send_fd_str,
 		storage_dir
 	};
+
+	rv = sscanf(argv[1], "%d", &pid);
+	if (rv != 1) {
+		kperr("can't parse pid from %s", argv[1]);
+		return -1;
+	}
+
+	sprintf(pid_str, "%d", pid);
+	sprintf(send_fd_str, "%d", fd);
+
+	optind = 1;
+	rv = cmd_patch_user(ARRAY_SIZE(patch_pid_argv), patch_pid_argv);
+	if (rv < 0)
+		kperr("can't patch pid %d\n", pid);
+
+	return 0;
+}
+
+static int
+server_execute_cmd(int fd, int argc, char *argv[])
+{
+	char *cmd = argv[0];
+	int old_stdout, old_stderr, rv;
+	optind = 1;
+
+	if (!strcmp(cmd, "startup"))
+		return cmd_startup(fd, argc, argv);
+
+	old_stdout = dup3(1, 101, O_CLOEXEC);
+	old_stderr = dup3(2, 102, O_CLOEXEC);
+
+	(void) dup3(fd, 1, O_CLOEXEC);
+	(void) dup3(fd, 2, O_CLOEXEC);
+
+	rv = execute_cmd(argc, argv);
+
+	fflush(stdout);
+	fflush(stderr);
+
+	(void) dup2(old_stdout, 1);
+	(void) dup2(old_stderr, 2);
+
+	return rv;
+}
+
+static int
+handle_client(int fd)
+{
+	char msg[4096], *argv[32], *p;
+	ssize_t off = 0, r;
+	int argc;
 
 	do {
 		r = recv(fd, msg + off, sizeof(msg) - off, 0);
@@ -1403,27 +1455,22 @@ handle_client(int fd)
 		goto out_close;
 	}
 
-	if (strcmp(msg, "startup")) {
-		kperr("client sent corrupted data, expected 'startup', got %s\n",
-		      msg);
-		goto out_close;
+	argv[0] = msg;
+	for (p = msg, argc = 1;
+	     p < msg + off && argc < ARRAY_SIZE(argv);
+	     p++) {
+		if (*p)
+			continue;
+		p++;
+
+		argv[argc] = p;
+		if (*p == '\0')
+			break;
+
+		argc++;
 	}
 
-	rv = sscanf(msg + sizeof("startup"), "%d", &pid);
-	if (rv != 1) {
-		kperr("can't parse pid from %s", msg);
-		goto out_close;
-	}
-
-	sprintf(pid_str, "%d", pid);
-	sprintf(send_fd_str, "%d", fd);
-
-	optind = 1;
-	rv = cmd_patch_user(ARRAY_SIZE(patch_pid_argv), patch_pid_argv);
-	if (rv < 0)
-		kperr("can't patch pid %d\n", pid);
-
-	return 0;
+	return server_execute_cmd(fd, argc, argv);
 
 out_close:
 	close(fd);
@@ -1560,11 +1607,26 @@ static int usage(const char *err)
 	return -1;
 }
 
+static int
+execute_cmd(int argc, char *argv[])
+{
+	char *cmd = argv[0];
+	optind = 1;
+
+	if (!strcmp(cmd, "patch") || !strcmp(cmd, "patch-user"))
+		return cmd_patch_user(argc, argv);
+	else if (!strcmp(cmd, "unpatch") || !strcmp(cmd, "unpatch-user"))
+		return cmd_unpatch_user(argc, argv);
+	else if (!strcmp(cmd, "info") || !strcmp(cmd, "info-user"))
+		return cmd_info_user(argc, argv);
+	else
+		return usage("unknown command");
+}
+
 /* entry point */
 int main(int argc, char *argv[])
 {
 	int opt;
-	char *cmd;
 
 	while ((opt = getopt(argc, argv, "+vh")) != EOF) {
 		switch (opt) {
@@ -1584,16 +1646,8 @@ int main(int argc, char *argv[])
 	if (argc < 1)
 		return usage("not enough arguments.");
 
-	cmd = argv[0];
-	optind = 1;
-	if (!strcmp(cmd, "patch") || !strcmp(cmd, "patch-user"))
-		return cmd_patch_user(argc, argv);
-	else if (!strcmp(cmd, "unpatch") || !strcmp(cmd, "unpatch-user"))
-		return cmd_unpatch_user(argc, argv);
-	else if (!strcmp(cmd, "info") || !strcmp(cmd, "info-user"))
-		return cmd_info_user(argc, argv);
-	else if (!strcmp(cmd, "server"))
+	if (!strcmp(argv[0], "server"))
 		return cmd_server(argc, argv);
 	else
-		return usage("unknown command");
+		return execute_cmd(argc, argv);
 }
