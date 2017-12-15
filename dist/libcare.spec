@@ -1,7 +1,7 @@
 Version: 0.1
 Name: libcare
 Summary: LibCare tools
-Release: 1
+Release: 1%{?dist}
 Group: Applications/System
 License: GPLv2
 Url: http://www.cloudlinux.com
