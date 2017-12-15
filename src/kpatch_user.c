@@ -1441,6 +1441,13 @@ cmd_kill(int argc, char *argv[])
 }
 
 static int
+cmd_storage(int argc, char *argv[])
+{
+	strncpy(storage_dir, argv[1], PATH_MAX - 1);
+	return 0;
+}
+
+static int
 server_execute_cmd(int fd, int argc, char *argv[])
 {
 	char *cmd = argv[0];
@@ -1449,6 +1456,8 @@ server_execute_cmd(int fd, int argc, char *argv[])
 
 	if (!strcmp(cmd, "startup"))
 		return cmd_startup(fd, argc, argv);
+	if (!strcmp(cmd, "storage"))
+		return cmd_storage(argc, argv);
 
 	old_stdout = dup3(1, 101, O_CLOEXEC);
 	old_stderr = dup3(2, 102, O_CLOEXEC);
