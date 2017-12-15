@@ -12,6 +12,7 @@
 #include <sys/stat.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <sys/wait.h>
 
 #include <gelf.h>
 #include <libunwind.h>
@@ -1404,6 +1405,42 @@ cmd_startup(int fd, int argc, char *argv[])
 }
 
 static int
+cmd_run(int argc, char *argv[])
+{
+	int pid;
+
+	pid = fork();
+	if (pid == -1) {
+		kplogerror("can't fork()\n");
+		return -1;
+	}
+
+	if (pid == 0) {
+		return execl("/bin/sh", "sh", "-c", argv[1], (char *)NULL);
+	}
+
+	printf("%d\n", pid);
+	return 0;
+}
+
+static int
+cmd_kill(int argc, char *argv[])
+{
+	int status, pid;
+
+	if (sscanf(argv[1], "%d", &pid) != 1) {
+		kperr("can't parse pid from %s\n", argv[1]);
+		return -1;
+	}
+
+	kpdebug("killing %d\n", pid);
+	(void) kill(pid, SIGTERM);
+	(void) waitpid(pid, &status, 0);
+
+	return 0;
+}
+
+static int
 server_execute_cmd(int fd, int argc, char *argv[])
 {
 	char *cmd = argv[0];
@@ -1419,7 +1456,13 @@ server_execute_cmd(int fd, int argc, char *argv[])
 	(void) dup3(fd, 1, O_CLOEXEC);
 	(void) dup3(fd, 2, O_CLOEXEC);
 
-	rv = execute_cmd(argc, argv);
+
+	if (!strcmp(cmd, "run"))
+		rv = cmd_run(argc, argv);
+	else if (!strcmp(cmd, "kill"))
+		rv = cmd_kill(argc, argv);
+	else
+		rv = execute_cmd(argc, argv);
 
 	fflush(stdout);
 	fflush(stderr);
