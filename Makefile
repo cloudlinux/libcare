@@ -5,7 +5,7 @@ all: src
 src: FORCE
 	make -C src
 
-tests: FORCE
+tests: src FORCE
 	make -C tests
 
 FORCE:
