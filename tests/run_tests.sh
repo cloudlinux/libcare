@@ -66,7 +66,9 @@ grep_tail() {
 
 libcare_server_init() {
 	SOCKPATH=$(mktemp --tmpdir -d)/test.sock
-	$LIBCARE_DOCTOR -v server $SOCKPATH & :
+	SERVER_LOG=$(mktemp --tmpdir)
+	stdbuf -o 0 $LIBCARE_CTL -v server $SOCKPATH \
+		>$SERVER_LOG 2>&1 </dev/null & :
 	SERVER_PID=$!
 	echo "SERVER_PID=$SERVER_PID"
 }
@@ -242,7 +244,7 @@ test_patch_startup_init_binfmt() {
 	done
 	kcare_genl_sink_log=$(mktemp --tmpdir)
 	xsudo ../binfmt/kcare_genl_sink "stdbuf -o 0 time \\
-		$LIBCARE_DOCTOR -v \\
+		$LIBCARE_CTL -v \\
 		patch-user -p %pid -s $PATCHROOT >logfile 2>&1" \
 			>$kcare_genl_sink_log 2>&1 & :
 	SUDO_GENL_SINK_PID=$!
@@ -279,9 +281,6 @@ test_patch_startup() {
 	local outfile=$2
 	local logfile=$3
 
-	# link logfile to the appropriate file
-	ln -fs $logfile logfile
-
 	run "LD_LIBRARY_PATH=$testname/$DESTDIR \
 		stdbuf -o 0 \
 		$PWD/$testname/$DESTDIR/$testname" $outfile
@@ -289,6 +288,9 @@ test_patch_startup() {
 	# Start up is patched automagically
 
 	kill_reap $pid
+
+	cat $SERVER_LOG > $logfile
+	echo > $SERVER_LOG
 }
 
 test_patch_startup_fini() {
@@ -487,7 +489,7 @@ should_skip() {
 env_init() {
 	TESTDIR=$(xrealpath $(dirname $0))
 	KPTOOLS=${KPTOOLS-$TESTDIR/../src}
-	LIBCARE_DOCTOR=$KPTOOLS/libcare-ctl
+	LIBCARE_CTL=$KPTOOLS/libcare-ctl
 	LIBCARE_CLIENT=$KPTOOLS/libcare-client
 	STAGE=${STAGE-$TESTDIR/stage/tmp}
 
