@@ -70,6 +70,9 @@ libcare_server_init() {
 	stdbuf -o 0 $LIBCARE_CTL -v server $SOCKPATH \
 		>$SERVER_LOG 2>&1 </dev/null & :
 	SERVER_PID=$!
+	sleep 1
+	cat $SERVER_LOG
+	kill -0 $SERVER_PID
 	echo "SERVER_PID=$SERVER_PID"
 }
 
