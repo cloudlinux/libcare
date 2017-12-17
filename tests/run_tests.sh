@@ -2,14 +2,6 @@
 
 set -e
 
-TESTDIR=$(realpath $(dirname $0))
-KPTOOLS=${KPTOOLS-$TESTDIR/../src}
-LIBCARE_DOCTOR=$KPTOOLS/libcare-ctl
-LIBCARE_CLIENT=$KPTOOLS/libcare-client
-STAGE=${STAGE-$TESTDIR/stage/tmp}
-
-TIME=$(which time)
-
 wait_file() {
 	while ! test -s $1; do sleep ${2-1}; done
 	return 0
@@ -27,23 +19,7 @@ xrealpath() {
 	if command -v realpath >/dev/null; then
 		realpath $1;
 	else
-		local p=$1
-		local n=
-		while test -L $p; do
-			n="$(ls -l $p | sed 's/.*-> //g')"
-			if test -n "${n##/*}"; then # relative path
-				n="$(dirname $p)/$n"
-			fi
-			p=$n
-		done
-		n="$(dirname $p)"
-		p="$(basename $p)"
-		if test "$n" != "/"; then
-			n="$(xrealpath $n)"
-		else
-			n=""
-		fi
-		echo $n/$p
+		readlink -f -- "$1"
 	fi
 }
 
@@ -88,14 +64,14 @@ grep_tail() {
 }
 
 
-common_init() {
+libcare_server_init() {
 	SOCKPATH=$(mktemp --tmpdir -d)/test.sock
 	$LIBCARE_DOCTOR -v server $SOCKPATH & :
 	SERVER_PID=$!
 	echo "SERVER_PID=$SERVER_PID"
 }
 
-common_fini() {
+libcare_server_fini() {
 	kill $SERVER_PID
 }
 
@@ -508,9 +484,20 @@ should_skip() {
 	return 1
 }
 
+env_init() {
+	TESTDIR=$(xrealpath $(dirname $0))
+	KPTOOLS=${KPTOOLS-$TESTDIR/../src}
+	LIBCARE_DOCTOR=$KPTOOLS/libcare-ctl
+	LIBCARE_CLIENT=$KPTOOLS/libcare-client
+	STAGE=${STAGE-$TESTDIR/stage/tmp}
+
+	TIME=$(which time)
+}
 
 main() {
 	export SLEEP_MULT=100000000
+
+	env_init
 
 	DESTDIR=build
 	FLAVOR=test_patch_files
@@ -581,7 +568,7 @@ main() {
 
 	FAILED=""
 
-	common_init
+	libcare_server_init
 	${FLAVOR}_init "$TESTS"
 	for tst in $TESTS; do
 		ntotal=$(($ntotal + 1))
@@ -598,7 +585,7 @@ main() {
 		fi
 	done
 	${FLAVOR}_fini
-	common_fini
+	libcare_server_fini
 
 	echo "OK $nok FAIL $nfailed SKIP $nskipped TOTAL $ntotal"
 	if test -n "$FAILED"; then
