@@ -57,10 +57,11 @@ prepare_env() {
 restore_origs() {
 	find $srcdir -regex '.+\.[0-9]+\.lpmakeorig' | awk '
 	{
-		match($0, /(.*)\.[0-9]+\.lpmakeorig/, a);
-		fname = a[1];
-		if (!vers[fname] || vers[fname] > $0)
-			{ vers[fname] = $0; }
+		origfname = $0;
+		gsub("\.[0-9]+\.lpmakeorig$", "");
+		fname = $0;
+		if (!vers[fname] || vers[fname] > origfname)
+			{ vers[fname] = origfname; }
 	}
 	END { for (f in vers) system("mv " vers[f] " " f); }
 '
