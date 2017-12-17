@@ -1,0 +1,14 @@
+script: make tests
+
+language: c
+
+dist: trusty
+sudo: false
+
+addons:
+  apt:
+    packages:
+    - elfutils
+    - libelf-dev
+    - libunwind8-dev
+    - realpath
