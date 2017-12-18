@@ -100,7 +100,7 @@ notify_listener(void)
 	}
 	dprintf("connect()\n");
 
-	p = stpcpy(buf, "startup") + 1;
+	p = stpcpy(buf, "execve") + 1;
 	sprintf(p, "%d", (int) syscall(SYS_gettid));
 	p += strlen(p) + 1;
 	*p = '\0';

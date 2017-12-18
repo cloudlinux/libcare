@@ -1373,7 +1373,7 @@ execute_cmd(int argc, char *argv[]);
 static char storage_dir[PATH_MAX] = "/var/lib/libcare";
 
 static int
-cmd_startup(int fd, int argc, char *argv[])
+cmd_execve(int fd, int argc, char *argv[])
 {
 	int rv, pid;
 	char pid_str[64], send_fd_str[64];
@@ -1454,8 +1454,8 @@ server_execute_cmd(int fd, int argc, char *argv[])
 	int old_stdout, old_stderr, rv;
 	optind = 1;
 
-	if (!strcmp(cmd, "startup"))
-		return cmd_startup(fd, argc, argv);
+	if (!strcmp(cmd, "execve"))
+		return cmd_execve(fd, argc, argv);
 	if (!strcmp(cmd, "storage"))
 		return cmd_storage(argc, argv);
 
