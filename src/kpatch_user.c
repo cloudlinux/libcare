@@ -835,6 +835,13 @@ static int process_patch(int pid, void *_data)
 		goto out_free;
 
 	/*
+	 * In case we got there from startup send_fd != -1.
+	 */
+	ret = kpatch_process_kick_send_fd(proc);
+	if (ret < 0)
+		goto out_free;
+
+	/*
 	 * For each object file that we want to patch (either binary
 	 * itself or shared library) we need its ELF structure
 	 * to perform relocations. Because we know uniq BuildID of
@@ -1373,13 +1380,21 @@ execute_cmd(int argc, char *argv[]);
 static char storage_dir[PATH_MAX] = "/var/lib/libcare";
 
 static int
-cmd_execve(int fd, int argc, char *argv[])
+cmd_execve_startup(int fd, int argc, char *argv[], int is_just_started)
 {
 	int rv, pid;
 	char pid_str[64], send_fd_str[64];
-	char *patch_pid_argv[] = {
+	char *patch_pid_argv_execve[] = {
 		"patch",
 		"-s",
+		"-p",
+		pid_str,
+		"-r",
+		send_fd_str,
+		storage_dir
+	};
+	char *patch_pid_argv_startup[] = {
+		"patch",
 		"-p",
 		pid_str,
 		"-r",
@@ -1397,7 +1412,13 @@ cmd_execve(int fd, int argc, char *argv[])
 	sprintf(send_fd_str, "%d", fd);
 
 	optind = 1;
-	rv = cmd_patch_user(ARRAY_SIZE(patch_pid_argv), patch_pid_argv);
+	if (is_just_started)
+		rv = cmd_patch_user(ARRAY_SIZE(patch_pid_argv_execve),
+				    patch_pid_argv_execve);
+	else
+		rv = cmd_patch_user(ARRAY_SIZE(patch_pid_argv_startup),
+				    patch_pid_argv_startup);
+
 	if (rv < 0)
 		kperr("can't patch pid %d\n", pid);
 
@@ -1455,7 +1476,9 @@ server_execute_cmd(int fd, int argc, char *argv[])
 	optind = 1;
 
 	if (!strcmp(cmd, "execve"))
-		return cmd_execve(fd, argc, argv);
+		return cmd_execve_startup(fd, argc, argv, 1);
+	if (!strcmp(cmd, "startup"))
+		return cmd_execve_startup(fd, argc, argv, 0);
 	if (!strcmp(cmd, "storage"))
 		return cmd_storage(argc, argv);
 

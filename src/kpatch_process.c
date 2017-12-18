@@ -16,6 +16,8 @@
 #include <libunwind.h>
 #include <libunwind-ptrace.h>
 
+#include <sys/socket.h>
+
 #include "kpatch_process.h"
 #include "kpatch_file.h"
 #include "kpatch_common.h"
@@ -848,6 +850,17 @@ kpatch_process_kickstart_execve_wrapper(kpatch_process_t *proc)
 	printf("\"\n");
 
 	return 0;
+}
+
+int
+kpatch_process_kick_send_fd(kpatch_process_t *proc)
+{
+	int dummy = 0;
+
+	if (proc->send_fd == -1 || proc->is_just_started)
+		return 0;
+
+	return send(proc->send_fd, &dummy, sizeof(dummy), 0);
 }
 
 int

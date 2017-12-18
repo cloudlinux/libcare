@@ -170,6 +170,8 @@ int
 kpatch_process_attach(kpatch_process_t *proc);
 int
 kpatch_process_load_libraries(kpatch_process_t *proc);
+int
+kpatch_process_kick_send_fd(kpatch_process_t *proc);
 
 void
 kpatch_process_print_short(kpatch_process_t *proc);
