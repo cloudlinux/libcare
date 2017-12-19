@@ -1,0 +1,77 @@
+
+policy_module(libcare, 1.0)
+
+require {
+	type svirt_t;
+	type init_t;
+	type var_run_t;
+	type proc_t;
+	type qemu_exec_t;
+
+	# DEBUG
+	#type bin_t;
+	#type user_devpts_t;
+	# END DEBUG
+}
+
+# systemd(init_t) executes /usr/bin/libcare-ctl(libcare_exec_t)
+# process becomes libcare_t
+systemd_domain_template(libcare)
+role system_r types libcare_t;
+
+# log files
+type libcare_log_t;
+logging_log_file(libcare_log_t)
+
+# socket file
+type libcare_var_run_t;
+files_pid_file(libcare_var_run_t)
+
+
+manage_dirs_pattern(libcare_t, libcare_log_t, libcare_log_t)
+manage_files_pattern(libcare_t, libcare_log_t, libcare_log_t)
+manage_lnk_files_pattern(libcare_t, libcare_log_t, libcare_log_t)
+
+manage_dirs_pattern(libcare_t, libcare_var_run_t, libcare_var_run_t)
+manage_files_pattern(libcare_t, libcare_var_run_t, libcare_var_run_t)
+manage_lnk_files_pattern(libcare_t, libcare_var_run_t, libcare_var_run_t)
+manage_sock_files_pattern(libcare_t, libcare_var_run_t, libcare_var_run_t)
+
+# temporary files for libcare_t process (FIXME what for?)
+allow libcare_t libcare_tmp_t : file manage_file_perms;
+files_tmp_filetrans(libcare_t,libcare_tmp_t,file)
+
+type libcare_tmp_t;
+files_tmp_file(libcare_tmp_t)
+
+# libcare data files /var/lib/libcare/*
+type libcare_file_t;
+files_type(libcare_file_t)
+
+allow libcare_t libcare_file_t: file read_file_perms;
+allow libcare_t libcare_file_t: dir list_dir_perms;
+allow libcare_t libcare_file_t: lnk_file read_lnk_file_perms;
+
+# to read patient's /proc entries and be able to attach to it
+allow libcare_t self: capability { dac_override dac_read_search sys_ptrace };
+
+allow libcare_t svirt_t : process ptrace;
+allow libcare_t svirt_t : dir list_dir_perms;
+allow libcare_t svirt_t : file rw_file_perms;
+allow libcare_t svirt_t : lnk_file read_lnk_file_perms;
+
+# libunwind needs this
+allow libcare_t qemu_exec_t : file read_file_perms;
+
+# to allow patient to send us 'startup' message
+allow svirt_t libcare_t : unix_stream_socket connectto;
+
+# to allow patient to send us SIGCHLD (required for ptrace)
+allow svirt_t libcare_t : process sigchld;
+
+
+# DEBUG
+#runcon system_u:system_r:libcare_t:s0 /usr/bin/libcare-ctl -v patch -p $(pidof qemu-kvm)  /var/lib/libcare
+#allow libcare_t bin_t : file { open read execute entrypoint };
+#allow libcare_t user_devpts_t : chr_file { read write append getattr ioctl };
+# END DEBUG

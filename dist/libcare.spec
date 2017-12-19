@@ -1,4 +1,7 @@
-Version: 0.1
+
+%bcond_without selinux
+
+Version: 0.1.1
 Name: libcare
 Summary: LibCare tools
 Release: 1%{?dist}
@@ -8,27 +11,68 @@ Url: http://www.cloudlinux.com
 Source0: %{name}-%{version}.tar.bz2
 BuildRequires: elfutils-libelf-devel libunwind-devel
 
+%if 0%{with selinux}
+BuildRequires:  checkpolicy
+BuildRequires:  selinux-policy-devel
+BuildRequires:  /usr/share/selinux/devel/policyhelp
+%endif
+
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
+
+%if 0%{with selinux}
+Requires:      libcare-selinux = %{version}-%{release}
+%endif
 
 %description
 LibCare userland tools
+
+%if 0%{with selinux}
+
+%package selinux
+Summary: SELinux package for LibCare/QEMU integration
+Group: System Environment/Base
+Requires(post): selinux-policy-base, policycoreutils
+Requires(postun): policycoreutils
+%description selinux
+This package contains SELinux module required to allow for
+LibCare interoperability with the QEMU run by sVirt.
+
+%endif
+
 
 %prep
 %setup -q
 
 %build
+
 make -C src
+%if 0%{with selinux}
+make -C dist/selinux
+%endif
 
 %install
 %{__rm} -rf %{buildroot}
 
-install -D -m 755 src/libcare-ctl $RPM_BUILD_ROOT%{_bindir}/libcare-ctl
-install -D -m 755 src/libcare-cc $RPM_BUILD_ROOT%{_bindir}/libcare-cc
-install -D -m 755 src/libcare-patch-make $RPM_BUILD_ROOT%{_bindir}/libcare-patch-make
+make -C src install \
+	DESTDIR=%{buildroot} \
+	bindir=%{_bindir} \
+	libexecdir=%{_libexecdir}
 
-install -D -m 755 src/kpatch_gensrc $RPM_BUILD_ROOT%{_libexecdir}/libcare/kpatch_gensrc
-install -D -m 755 src/kpatch_make $RPM_BUILD_ROOT%{_libexecdir}/libcare/kpatch_make
-install -D -m 755 src/kpatch_strip $RPM_BUILD_ROOT%{_libexecdir}/libcare/kpatch_strip
+%if 0%{with selinux}
+make -C dist/selinux install \
+	DESTDIR=%{buildroot}
+%endif
+
+
+install -m 0644 -D dist/libcare.service %{buildroot}%{_unitdir}/libcare.service
+
+mkdir -p %{buildroot}%{_localstatedir}/log/libcare
+mkdir -p %{buildroot}%{_localstatedir}/run/libcare
+ln -sf %{_localstatedir}/run/libcare/libcare.sock %{buildroot}%{_localstatedir}/run/libcare.sock
+
+%pre
+/usr/sbin/groupadd libcare -r 2>/dev/null || :
+/usr/sbin/usermod -a -G libcare qemu 2>/dev/null || :
 
 %clean
 rm -rf $RPM_BUILD_ROOT
@@ -36,12 +80,62 @@ rm -rf $RPM_BUILD_ROOT
 %files
 %defattr(-,root,root)
 %{_bindir}/libcare-ctl
+%{_bindir}/libcare-client
 %{_bindir}/libcare-cc
 %{_bindir}/libcare-patch-make
 %{_libexecdir}/libcare/kpatch_gensrc
 %{_libexecdir}/libcare/kpatch_strip
 %{_libexecdir}/libcare/kpatch_make
+%{_unitdir}/libcare.service
+%dir %{_localstatedir}/log/libcare
+%attr(750,root,libcare) %dir %{_localstatedir}/run/libcare
+%{_localstatedir}/run/libcare.sock
+
+%if 0%{with selinux}
+
+%files selinux
+%defattr(-,root,root,-)
+%attr(0600,root,root) %{_datadir}/selinux/packages/libcare.pp
+
+%post selinux
+. /etc/selinux/config
+FILE_CONTEXT=/etc/selinux/${SELINUXTYPE}/contexts/files/file_contexts
+cp ${FILE_CONTEXT} ${FILE_CONTEXT}.pre
+
+/usr/sbin/semodule -i %{_datadir}/selinux/packages/libcare.pp
+
+# Load the policy if SELinux is enabled
+if ! /usr/sbin/selinuxenabled; then
+    # Do not relabel if selinux is not enabled
+    exit 0
+fi
+
+/usr/sbin/fixfiles -C ${FILE_CONTEXT}.pre restore 2> /dev/null
+
+rm -f ${FILE_CONTEXT}.pre
+
+exit 0
+
+%postun selinux
+if [ $1 -eq 0 ]; then
+    . /etc/selinux/config
+    FILE_CONTEXT=/etc/selinux/${SELINUXTYPE}/contexts/files/file_contexts
+    cp ${FILE_CONTEXT} ${FILE_CONTEXT}.pre
+
+    # Remove the module
+    /usr/sbin/semodule -n -r libcare > /dev/null 2>&1
+
+    /usr/sbin/fixfiles -C ${FILE_CONTEXT}.pre restore 2> /dev/null
+fi
+exit 0
+
+%endif
 
 %changelog
+* Mon Dec 11 2017 Pavel Boldin <pboldin@cloudlinux.com> - 0.1.1-1
+- add libcare-client
+- add systemd startup script
+- add selinux support so we can patch RHEL7's QEMU's
+
 * Mon Dec 11 2017 Pavel Boldin <pboldin@cloudlinux.com> - 0.1-1
 - first version

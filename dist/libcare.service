@@ -1,0 +1,11 @@
+[Unit]
+Description=LibCare patch server
+
+[Service]
+ExecStartPre=-/usr/bin/rm -f /run/libcare/libcare.sock
+ExecStart=/usr/bin/libcare-ctl server /run/libcare/libcare.sock
+ExecStartPost=/usr/bin/chmod a+w /run/libcare/libcare.sock
+ExecStop=/usr/bin/libcare-client /run/libcare/libcare.sock stop
+
+[Install]
+WantedBy=libvirtd.service
