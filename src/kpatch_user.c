@@ -1376,7 +1376,7 @@ int cmd_info_user(int argc, char *argv[])
 
 
 /* Server part. Used as a start-up notification listener. */
-#define SERVER_STOP	(1<<31)
+#define SERVER_STOP	(1<<30)
 
 static int
 execute_cmd(int argc, char *argv[]);
@@ -1485,6 +1485,8 @@ server_execute_cmd(int fd, int argc, char *argv[])
 		return cmd_execve_startup(fd, argc, argv, 0);
 	if (!strcmp(cmd, "storage"))
 		return cmd_storage(argc, argv);
+	if (!strcmp(cmd, "stop"))
+		return SERVER_STOP;
 
 	old_stdout = dup3(1, 101, O_CLOEXEC);
 	old_stderr = dup3(2, 102, O_CLOEXEC);
@@ -1607,6 +1609,8 @@ cmd_server(int argc, char *argv[])
 	rv = listen(sfd, LISTEN_BACKLOG);
 	if (rv == -1)
 		goto err_close;
+
+	setlinebuf(stdout);
 
 	while ((cfd = accept4(sfd, NULL, 0, SOCK_CLOEXEC)) >= 0) {
 		rv = handle_client(cfd);
