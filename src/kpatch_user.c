@@ -1038,14 +1038,12 @@ object_unapply_patch(struct object_file *o, int check_flag)
 
 		ret = kpatch_process_memcpy(o->proc,
 					    o->info[i].daddr,
-					    orig_code_addr,
+					    orig_code_addr + i * HUNK_SIZE,
 					    HUNK_SIZE);
 		/* XXX(pboldin) We are in deep trouble here, handle it
 		 * by restoring the patch back */
 		if (ret < 0)
 			return ret;
-
-		orig_code_addr += HUNK_SIZE;
 	}
 
 	ret = kpatch_munmap_remote(proc2pctx(o->proc),
