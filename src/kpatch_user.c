@@ -404,7 +404,7 @@ object_patch_verify_safety_single(struct object_file *o,
 	unw_word_t ip;
 	struct kpatch_info *info = o->info;
 	size_t i, ninfo = o->ninfo;
-	int prev = 0;
+	int prev = 0, rv;
 	unsigned long last = 0;
 
 	if (direction != ACTION_APPLY_PATCH &&
@@ -413,6 +413,7 @@ object_patch_verify_safety_single(struct object_file *o,
 
 	do {
 		unw_get_reg(cur, UNW_REG_IP, &ip);
+		kpinfo("ip = %lx\n", ip);
 
 		for (i = 0; i < ninfo; i++) {
 			if (is_new_func(&info[i]))
@@ -435,7 +436,12 @@ object_patch_verify_safety_single(struct object_file *o,
 			if (!paranoid)
 				break;
 		}
-	} while (unw_step(cur) > 0);
+
+		rv = unw_step(cur);
+	} while (rv > 0);
+
+	if (rv < 0)
+		kperr("unw_step = %d\n", rv);
 
 	return last;
 }
