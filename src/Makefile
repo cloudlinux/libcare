@@ -88,4 +88,20 @@ tests-kpcc: kpatch_cc
 tests-strip: kpatch_strip
 	KPATCH_STRIP=$(CURDIR)/kpatch_strip ./tests/strip/test_simple.sh
 
+
+bindir ?= /usr/local/bin
+libexecdir ?= /usr/local/libexec
+INSTALL ?= install
+install: all
+	$(INSTALL) -d $(DESTDIR)/$(bindir)
+	$(INSTALL) -m 0755 libcare-ctl $(DESTDIR)/$(bindir)/libcare-ctl
+	$(INSTALL) -m 0755 libcare-client $(DESTDIR)/$(bindir)/libcare-client
+	$(INSTALL) -m 0755 libcare-cc $(DESTDIR)/$(bindir)/libcare-cc
+	$(INSTALL) -m 0755 libcare-patch-make $(DESTDIR)/$(bindir)/libcare-patch-make
+
+	$(INSTALL) -d $(DESTDIR)/$(libexecdir)/libcare
+	$(INSTALL) -m 0755 kpatch_gensrc $(DESTDIR)/$(libexecdir)/libcare/kpatch_gensrc
+	$(INSTALL) -m 0755 kpatch_make $(DESTDIR)/$(libexecdir)/libcare/kpatch_make
+	$(INSTALL) -m 0755 kpatch_strip $(DESTDIR)/$(libexecdir)/libcare/kpatch_strip
+
 .PHONY:	all clean test tests tests-gensrc tests-strip
