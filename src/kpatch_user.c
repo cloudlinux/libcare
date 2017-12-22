@@ -1473,6 +1473,21 @@ cmd_storage(int argc, char *argv[])
 }
 
 static int
+cmd_update(int argc, char *argv[])
+{
+	char *patch_all[] = {
+		"patch",
+		"-p",
+		"all",
+		"-r",
+		storage_dir
+	};
+
+	optind = 1;
+	return cmd_patch_user(ARRAY_SIZE(patch_all), patch_all);
+}
+
+static int
 server_execute_cmd(int fd, int argc, char *argv[])
 {
 	char *cmd = argv[0];
@@ -1483,6 +1498,8 @@ server_execute_cmd(int fd, int argc, char *argv[])
 		return cmd_execve_startup(fd, argc, argv, 1);
 	if (!strcmp(cmd, "startup"))
 		return cmd_execve_startup(fd, argc, argv, 0);
+	if (!strcmp(cmd, "update"))
+		return cmd_update(argc, argv);
 	if (!strcmp(cmd, "storage"))
 		return cmd_storage(argc, argv);
 	if (!strcmp(cmd, "stop"))
