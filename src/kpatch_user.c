@@ -374,6 +374,25 @@ is_addr_in_info(unsigned long addr,
 	return 0;
 }
 
+static void print_address_closest_func(int log_level, struct object_file *o, unw_cursor_t *cur, int in_oldpatch)
+{
+	unsigned long address, offset;
+	char fname[128];
+
+	unw_get_reg(cur, UNW_REG_IP, &address);
+
+	if (in_oldpatch)
+		if (address >= o->kpta && address < o->kpta + o->kpfile.size) {
+			kplog(log_level, "\t[0x%lx](patch)\n", address);
+			return;
+		}
+
+	if (!unw_get_proc_name(cur, fname, 128, &offset))
+		kplog(log_level, "\t[0x%lx] %s+0x%lx\n", address, fname, offset);
+	else
+		kplog(log_level, "\t[0x%lx]\n", address);
+}
+
 /**
  * Verify that the function from file `o' is safe to be patched.
  *
@@ -412,8 +431,9 @@ object_patch_verify_safety_single(struct object_file *o,
 		kpfatal("unknown direction");
 
 	do {
+		print_address_closest_func(LOG_INFO, o, cur, direction == ACTION_UNAPPLY_PATCH);
+
 		unw_get_reg(cur, UNW_REG_IP, &ip);
-		kpinfo("ip = %lx\n", ip);
 
 		for (i = 0; i < ninfo; i++) {
 			if (is_new_func(&info[i]))
@@ -462,7 +482,8 @@ patch_verify_safety(struct object_file *o,
 	list_for_each_entry(c, &o->proc->coro.coros, list) {
 		void *ucoro;
 
-		kpdebug("Verifying safety for coroutine %zd...", count);
+		kpdebug("Verifying safety for coroutine %zd...\n", count);
+		kpinfo("Stacktrace to verify safety for coroutine %zd:\n", count);
 		ucoro = _UCORO_create(c, proc2pctx(o->proc)->pid);
 		if (!ucoro) {
 			kplogerror("can't create unwind coro context\n");
@@ -492,7 +513,8 @@ patch_verify_safety(struct object_file *o,
 	list_for_each_entry(p, &o->proc->ptrace.pctxs, list) {
 		void *upt;
 
-		kpdebug("Verifying safety for pid %d...", p->pid);
+		kpdebug("Verifying safety for pid %d...\n", p->pid);
+		kpinfo("Stacktrace to verify safety for pid %d:\n", p->pid);
 		upt = _UPT_create(p->pid);
 		if (!upt) {
 			kplogerror("can't create unwind ptrace context\n");
