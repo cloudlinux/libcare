@@ -1479,7 +1479,6 @@ cmd_update(int argc, char *argv[])
 		"patch",
 		"-p",
 		"all",
-		"-r",
 		storage_dir
 	};
 
