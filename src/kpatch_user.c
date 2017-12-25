@@ -1678,7 +1678,7 @@ processes_do(int pid, callback_t callback, void *data)
 	DIR *dir;
 	struct dirent *de;
 	int ret = 0, rv;
-	char *tmp;
+	char *tmp, buf[64];
 
 	if (pid != -1)
 		return callback(pid, data);
@@ -1699,6 +1699,16 @@ processes_do(int pid, callback_t callback, void *data)
 
 		if (pid == 1 || pid == getpid())
 			continue;
+
+		snprintf(buf, sizeof(buf), "/proc/%d/exe", pid);
+		rv = readlink(buf, buf, sizeof(buf));
+		if (rv == -1) {
+			if (errno == ENOENT)
+				kpdebug("skipping kernel thread %d\n", pid);
+			else
+				kplogerror("can't get exec for %d\n", pid);
+			continue;
+		}
 
 		rv = callback(pid, data);
 		if (rv < 0)
