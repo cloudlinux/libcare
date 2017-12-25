@@ -1,7 +1,7 @@
 
 %bcond_without selinux
 
-Version: 0.1.1
+Version: 0.1.2
 Name: libcare
 Summary: LibCare tools
 Release: 1%{?dist}
@@ -132,6 +132,9 @@ exit 0
 %endif
 
 %changelog
+* Mon Dec 25 2017 Pavel Boldin <pboldin@cloudlinux.com> - 0.1.2-1
+- add code executing after/before scripts
+
 * Mon Dec 11 2017 Pavel Boldin <pboldin@cloudlinux.com> - 0.1.1-1
 - add libcare-client
 - add systemd startup script
