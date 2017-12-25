@@ -70,8 +70,14 @@ struct object_file {
 	struct kpatch_info *info;
 	size_t ninfo;
 
-	/* TODO description */
+	/* Address of the first allocated virtual memory area */
 	unsigned long vma_start;
+
+	/*
+	 * Load offset. Add this values to symbol addresses to get
+	 * correct addresses in the loaded binary. Zero for EXEC,
+	 * equals to `vma_start` for DYN (libs and PIEs)
+	 */
 	unsigned long load_offset;
 
 	/* ELF header for the object file */

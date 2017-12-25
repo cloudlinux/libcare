@@ -382,7 +382,7 @@ static int qemu_cloudlinux_find_coroutines(struct kpatch_process *proc)
 		}
 
 		rv = kpatch_process_mem_read(proc,
-					     exec_obj->vma_start + addr,
+					     exec_obj->load_offset + addr,
 					     variable->data,
 					     variable->size);
 		if (rv < 0) {
