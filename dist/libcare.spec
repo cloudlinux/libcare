@@ -1,7 +1,7 @@
 
 %bcond_without selinux
 
-Version: 0.1.1
+Version: 0.1.2
 Name: libcare
 Summary: LibCare tools
 Release: 1%{?dist}
@@ -65,14 +65,20 @@ make -C dist/selinux install \
 
 
 install -m 0644 -D dist/libcare.service %{buildroot}%{_unitdir}/libcare.service
-
-mkdir -p %{buildroot}%{_localstatedir}/log/libcare
-mkdir -p %{buildroot}%{_localstatedir}/run/libcare
-ln -sf %{_localstatedir}/run/libcare/libcare.sock %{buildroot}%{_localstatedir}/run/libcare.sock
+install -m 0644 -D dist/libcare.preset %{buildroot}%{_presetdir}/90-libcare.preset
 
 %pre
 /usr/sbin/groupadd libcare -r 2>/dev/null || :
 /usr/sbin/usermod -a -G libcare qemu 2>/dev/null || :
+
+%post
+%systemd_post libcare.service
+
+%preun
+%systemd_preun libcare.service
+
+%postun
+%systemd_postun libcare.service
 
 %clean
 rm -rf $RPM_BUILD_ROOT
@@ -87,9 +93,7 @@ rm -rf $RPM_BUILD_ROOT
 %{_libexecdir}/libcare/kpatch_strip
 %{_libexecdir}/libcare/kpatch_make
 %{_unitdir}/libcare.service
-%dir %{_localstatedir}/log/libcare
-%attr(750,root,libcare) %dir %{_localstatedir}/run/libcare
-%{_localstatedir}/run/libcare.sock
+%{_presetdir}/90-libcare.preset
 
 %if 0%{with selinux}
 
@@ -132,6 +136,11 @@ exit 0
 %endif
 
 %changelog
+* Mon Dec 25 2017 Pavel Boldin <pboldin@cloudlinux.com> - 0.1.2-1
+- add code executing after/before scripts
+- spec: exec systemctl's hooks
+- fix files in /run
+
 * Mon Dec 11 2017 Pavel Boldin <pboldin@cloudlinux.com> - 0.1.1-1
 - add libcare-client
 - add systemd startup script

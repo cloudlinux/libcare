@@ -19,10 +19,6 @@ role system_r types libcare_t;
 type libcare_log_t;
 logging_log_file(libcare_log_t)
 
-# socket file
-type libcare_var_run_t;
-files_pid_file(libcare_var_run_t)
-
 # Execute before/after scripts
 corecmd_exec_shell(libcare_t)
 
@@ -35,10 +31,7 @@ manage_dirs_pattern(libcare_t, libcare_log_t, libcare_log_t)
 manage_files_pattern(libcare_t, libcare_log_t, libcare_log_t)
 manage_lnk_files_pattern(libcare_t, libcare_log_t, libcare_log_t)
 
-manage_dirs_pattern(libcare_t, libcare_var_run_t, libcare_var_run_t)
-manage_files_pattern(libcare_t, libcare_var_run_t, libcare_var_run_t)
-manage_lnk_files_pattern(libcare_t, libcare_var_run_t, libcare_var_run_t)
-manage_sock_files_pattern(libcare_t, libcare_var_run_t, libcare_var_run_t)
+manage_sock_files_pattern(libcare_t, var_run_t, var_run_t)
 
 # temporary files for libcare_t process (FIXME what for?)
 allow libcare_t libcare_tmp_t : file manage_file_perms;

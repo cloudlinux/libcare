@@ -2,11 +2,14 @@
 Description=LibCare patch server
 
 [Service]
-ExecStartPre=-/usr/bin/rm -f /run/libcare/libcare.sock
-ExecStart=/usr/bin/libcare-ctl server /run/libcare/libcare.sock
-ExecStartPost=/usr/bin/chmod a+w /run/libcare/libcare.sock
-ExecStartPost=/usr/bin/libcare-client /run/libcare/libcare.sock update
-ExecStop=/usr/bin/libcare-client /run/libcare/libcare.sock stop
+
+ExecStartPre=-/usr/bin/rm -f /run/libcare.sock
+ExecStart=/usr/bin/libcare-ctl server /run/libcare.sock
+ExecStartPost=/usr/bin/chown root.libcare /run/libcare.sock
+ExecStartPost=/usr/bin/chmod 0770 /run/libcare.sock
+ExecStartPost=/usr/bin/libcare-client /run/libcare.sock update
+
+ExecStop=/usr/bin/libcare-client /run/libcare.sock stop
 
 [Install]
 WantedBy=libvirtd.service

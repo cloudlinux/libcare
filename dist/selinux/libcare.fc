@@ -1,4 +1,3 @@
 /usr/bin/libcare-ctl		gen_context(system_u:object_r:libcare_exec_t,s0)
 /var/lib/libcare(/.*)? 		gen_context(system_u:object_r:libcare_file_t,s0)
 /var/log/libcare(/.*)?		gen_context(system_u:object_r:libcare_log_t,s0)
-/var/run/libcare(/.*)?		gen_context(system_u:object_r:libcare_var_run_t,s0)
