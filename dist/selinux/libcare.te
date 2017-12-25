@@ -8,10 +8,6 @@ require {
 	type proc_t;
 	type qemu_exec_t;
 
-	# DEBUG
-	#type bin_t;
-	#type user_devpts_t;
-	# END DEBUG
 }
 
 # systemd(init_t) executes /usr/bin/libcare-ctl(libcare_exec_t)
@@ -27,6 +23,13 @@ logging_log_file(libcare_log_t)
 type libcare_var_run_t;
 files_pid_file(libcare_var_run_t)
 
+# Execute before/after scripts
+corecmd_exec_shell(libcare_t)
+
+# Execute setsebool from before/after scripts
+# TODO(pboldin): these should go into qemu-specific package
+seutil_domtrans_setsebool(libcare_t)
+#allow libcare_t setsebool_exec_t: file { read getattr execute open };
 
 manage_dirs_pattern(libcare_t, libcare_log_t, libcare_log_t)
 manage_files_pattern(libcare_t, libcare_log_t, libcare_log_t)
@@ -49,6 +52,7 @@ type libcare_file_t;
 files_type(libcare_file_t)
 
 allow libcare_t libcare_file_t: file read_file_perms;
+allow libcare_t libcare_file_t: file exec_file_perms;
 allow libcare_t libcare_file_t: dir list_dir_perms;
 allow libcare_t libcare_file_t: lnk_file read_lnk_file_perms;
 
@@ -71,7 +75,11 @@ allow svirt_t libcare_t : process sigchld;
 
 
 # DEBUG
-#runcon system_u:system_r:libcare_t:s0 /usr/bin/libcare-ctl -v patch -p $(pidof qemu-kvm)  /var/lib/libcare
+## Run runcon system_u:system_r:libcare_t:s0 /usr/bin/libcare-ctl -v patch -p $(pidof qemu-kvm)  /var/lib/libcare
+#require {
+#	type bin_t;
+#	type user_devpts_t;
+#}
 #allow libcare_t bin_t : file { open read execute entrypoint };
 #allow libcare_t user_devpts_t : chr_file { read write append getattr ioctl };
 # END DEBUG
