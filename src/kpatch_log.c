@@ -78,6 +78,7 @@ void __valogerror(const char *file, int line, const char *fmt, va_list va)
 		}
 	}
 #endif
+	errno = errno_sv;
 }
 
 void _kplogerror(const char *file, int line, const char *fmt, ...)
