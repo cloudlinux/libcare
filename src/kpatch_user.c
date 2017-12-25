@@ -81,7 +81,7 @@ storage_init(kpatch_storage_t *storage,
 	struct stat stat = { .st_mode = 0 };
 
 	if (fname != NULL) {
-		patch_fd = open(fname, O_RDONLY);
+		patch_fd = open(fname, O_RDONLY | O_CLOEXEC);
 		if (patch_fd < 0)
 			goto out_err;
 
@@ -354,6 +354,60 @@ storage_lookup_patches(kpatch_storage_t *storage, kpatch_process_t *proc)
 		kpatch_object_dump(o);
 
 	return found;
+}
+
+static int
+storage_execute_script(kpatch_storage_t *storage,
+		       kpatch_process_t *proc,
+		       const char *name)
+{
+	int childpid, rv = 0, status;
+	char pidbuf[16], pathbuf[PATH_MAX];
+
+	if (!storage->is_patch_dir)
+		return 0;
+
+	sprintf(pathbuf, "%s/%s", storage->path, name);
+
+	rv = access(pathbuf, X_OK);
+	/* No file -- no problems */
+	if (rv < 0)
+		return errno == ENOENT ? 0 : -1;
+
+	sprintf(pidbuf, "%d", proc->pid);
+
+	childpid = fork();
+	if (childpid == 0) {
+		rv = execl(pathbuf, name, pidbuf, NULL);
+		if (rv < 0)
+			kplogerror("execl failed\n");
+		exit(EXIT_FAILURE);
+	} else {
+		rv = waitpid(childpid, &status, 0);
+		if (rv < 0)
+			kplogerror("waitpid failed for %d\n", childpid);
+
+		if (WIFEXITED(status))
+			rv = WEXITSTATUS(status);
+		else if (WIFSIGNALED(status))
+			rv = WTERMSIG(status);
+		if (rv)
+			kperr("child script failed %d\n", rv);
+	}
+
+	return -rv;
+}
+
+static int
+storage_execute_before_script(kpatch_storage_t *storage, kpatch_process_t *proc)
+{
+	return storage_execute_script(storage, proc, "before");
+}
+
+static int
+storage_execute_after_script(kpatch_storage_t *storage, kpatch_process_t *proc)
+{
+	return storage_execute_script(storage, proc, "after");
 }
 
 enum {
@@ -869,7 +923,15 @@ static int process_patch(int pid, void *_data)
 	if (ret < 0)
 		goto out_free;
 
+	ret = storage_execute_before_script(storage, proc);
+	if (ret < 0)
+		goto out_free;
+
 	ret = kpatch_apply_patches(proc);
+
+	if (storage_execute_after_script(storage, proc) < 0)
+		kperr("after script failed\n");
+
 
 out_free:
 	kpatch_process_free(proc);
