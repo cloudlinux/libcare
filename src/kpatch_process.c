@@ -50,7 +50,9 @@ static int lock_process(int pid)
 
 static void unlock_process(int pid, int fdmaps)
 {
+	int errsv = errno;
 	close(fdmaps);
+	errno = errsv;
 }
 
 static int
