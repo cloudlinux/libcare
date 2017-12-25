@@ -5,6 +5,7 @@ Description=LibCare patch server
 ExecStartPre=-/usr/bin/rm -f /run/libcare/libcare.sock
 ExecStart=/usr/bin/libcare-ctl server /run/libcare/libcare.sock
 ExecStartPost=/usr/bin/chmod a+w /run/libcare/libcare.sock
+ExecStartPost=/usr/bin/libcare-client /run/libcare/libcare.sock update
 ExecStop=/usr/bin/libcare-client /run/libcare/libcare.sock stop
 
 [Install]
