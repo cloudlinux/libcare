@@ -1,7 +1,7 @@
 
 %bcond_without selinux
 
-Version: 0.1.2
+Version: 0.1.3
 Name: libcare
 Summary: LibCare tools
 Release: 1%{?dist}
@@ -161,6 +161,10 @@ exit 0
 %endif
 
 %changelog
+* Wed Dec 27 2017 Pavel Boldin <pboldin@cloudlinux.com> - 0.1.3-1
+- use systemd's libcare.socket
+- use libcare-client default's path
+
 * Mon Dec 25 2017 Pavel Boldin <pboldin@cloudlinux.com> - 0.1.2-1
 - add code executing after/before scripts
 - spec: exec systemctl's hooks
