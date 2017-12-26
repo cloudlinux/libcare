@@ -27,6 +27,9 @@
 #include "list.h"
 #include "kpatch_log.h"
 
+/* Global variables */
+static char storage_dir[PATH_MAX] = "/var/lib/libcare";
+
 
 /*****************************************************************************
  * Utilities.
@@ -1338,7 +1341,8 @@ int usage_info(const char *err)
 	fprintf(stderr, "  -h		- this message\n");
 	fprintf(stderr, "  -b <BUILDID>	- output all processes having object with specified BuildID loaded\n");
 	fprintf(stderr, "  -p <PID>	- target process, 'all' or omitted for all the system processes\n");
-	fprintf(stderr, "  -s <STORAGE>	- only show BuildIDs of object having patches in STORAGE\n");
+	fprintf(stderr, "  -s <STORAGE>	- only show BuildIDs of object having patches in STORAGE, default %s\n",
+		storage_dir);
 	fprintf(stderr, "  -r <REGEXP>	- only show BuildIDs of object having name matching REGEXP\n");
 	return err ? 0 : -1;
 }
@@ -1475,7 +1479,9 @@ out_err:
 int cmd_info_user(int argc, char *argv[])
 {
 	int opt, pid = -1, verbose = 0;
-	const char *buildid = NULL, *storagepath = NULL, *regexp = NULL;
+	const char *buildid = NULL;
+	const char *storagepath = storage_dir;
+	const char *regexp = NULL;
 
 	while ((opt = getopt(argc, argv, "hb:p:s:r:v")) != EOF) {
 		switch (opt) {
@@ -1488,6 +1494,9 @@ int cmd_info_user(int argc, char *argv[])
 			break;
 		case 's':
 			storagepath = optarg;
+			if (storagepath[0] == '\0' ||
+			    !strcmp(storagepath, "/dev/null"))
+				storagepath = NULL;
 			break;
 		case 'r':
 			regexp = optarg;
@@ -1520,8 +1529,6 @@ int cmd_info_user(int argc, char *argv[])
 
 static int
 execute_cmd(int argc, char *argv[]);
-
-static char storage_dir[PATH_MAX] = "/var/lib/libcare";
 
 static int
 cmd_execve_startup(int fd, int argc, char *argv[], int is_just_started)
