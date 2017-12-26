@@ -296,6 +296,8 @@ storage_get_patch(kpatch_storage_t *storage, const char *buildid,
 		return ERR_PATCH;
 
 	memset(patch, 0, sizeof(*patch));
+	patch->patchlevel = -1;
+	init_kp_file(&patch->kpfile);
 
 	if (load)
 		rv = storage_open_patch(storage, buildid, patch);
@@ -318,6 +320,12 @@ storage_get_patch(kpatch_storage_t *storage, const char *buildid,
 }
 
 static int
+storage_patch_found(struct kpatch_storage_patch *patch)
+{
+	return patch && patch->kpfile.size >= 0;
+}
+
+static int
 storage_load_patch(kpatch_storage_t *storage, const char *buildid,
 		   struct kp_file **pkpfile)
 {
@@ -336,21 +344,27 @@ storage_load_patch(kpatch_storage_t *storage, const char *buildid,
 
 	*pkpfile = &patch->kpfile;
 
-	return patch->kpfile.size ? PATCH_FOUND : PATCH_NOT_FOUND;
+	return storage_patch_found(patch) ? PATCH_FOUND : PATCH_NOT_FOUND;
 }
 
 static int
-storage_have_patch(kpatch_storage_t *storage, const char *buildid)
+storage_have_patch(kpatch_storage_t *storage, const char *buildid,
+		   struct kpatch_storage_patch **ppatch)
 {
 	struct kpatch_storage_patch *patch = NULL;
+
+	if (ppatch)
+		*ppatch = NULL;
 
 	patch = storage_get_patch(storage, buildid, /* load */ 0);
 	if (patch == ERR_PATCH)
 		return PATCH_OPEN_ERROR;
 
-	if (patch == NULL || patch->kpfile.size == 0)
+	if (!storage_patch_found(patch))
 		return PATCH_NOT_FOUND;
 
+	if (ppatch)
+		*ppatch = patch;
 	return PATCH_FOUND;
 }
 
@@ -1360,6 +1374,8 @@ object_info(struct info_data *data, struct object_file *o,
 	const char *buildid;
 	kpatch_process_t *proc = o->proc;
 	int pid = proc->pid;
+	struct kpatch_storage_patch *patch = NULL;
+	int patch_found = PATCH_NOT_FOUND;
 
 	if (!o->is_elf || is_kernel_object_name(o->name))
 		return 0;
@@ -1385,8 +1401,12 @@ object_info(struct info_data *data, struct object_file *o,
 		return 0;
 	}
 
-	if (data->storage &&
-	    storage_have_patch(data->storage, buildid) <= 0)
+	if (data->storage)
+		patch_found = storage_have_patch(data->storage,
+						 buildid,
+						 &patch);
+
+	if (o->applied_patch == NULL && !patch_found)
 		return 0;
 
 	if (!*pid_printed) {
@@ -1398,6 +1418,12 @@ object_info(struct info_data *data, struct object_file *o,
 	if (o->applied_patch != NULL) {
 		int patchlvl = o->kpfile.patch->user_level;
 		printf(" patchlvl=%d", patchlvl);
+	}
+	if (storage_patch_found(patch) && patch->patchlevel) {
+		printf(" latest=%d", patch->patchlevel);
+	}
+	if (patch && (o->applied_patch == NULL || patch->patchlevel > o->kpfile.patch->user_level)) {
+		printf("\nbetter patch available, do `libcare-client /run/libcare.sock update`");
 	}
 	printf("\n");
 

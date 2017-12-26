@@ -6,12 +6,12 @@ struct kp_file {
 	ssize_t size;
 };
 
-#define INIT_KP_FILE()	{ .patch = NULL, .size = 0 }
+#define INIT_KP_FILE()	{ .patch = NULL, .size = -1 }
 static inline void
 init_kp_file(struct kp_file *kpf)
 {
 	kpf->patch = NULL;
-	kpf->size = 0;
+	kpf->size = -1;
 }
 
 #include <errno.h>	/* GNU has TLS errno */
