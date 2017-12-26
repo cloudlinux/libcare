@@ -1495,6 +1495,10 @@ int cmd_info_user(int argc, char *argv[])
 		case 'v':
 			verbose = 1;
 			break;
+		case 'h':
+			return usage_info(NULL);
+		default:
+			return usage_info("unknown arg");
 		}
 	}
 
