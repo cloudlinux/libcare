@@ -1389,7 +1389,13 @@ object_info(struct info_data *data, struct object_file *o,
 		printf("pid=%d comm=%s\n", pid, proc->comm);
 		*pid_printed = 1;
 	}
-	printf("%s buildid=%s\n", o->name, buildid);
+
+	printf("%s buildid=%s", o->name, buildid);
+	if (o->applied_patch != NULL) {
+		int patchlvl = o->kpfile.patch->user_level;
+		printf(" patchlvl=%d", patchlvl);
+	}
+	printf("\n");
 
 	return 0;
 }
@@ -1410,7 +1416,7 @@ process_info(int pid, void *_data)
 	if (ret < 0)
 		goto out;
 
-	ret = kpatch_process_parse_proc_maps(proc);
+	ret = kpatch_process_map_object_files(proc);
 	if (ret < 0)
 		goto out;
 
