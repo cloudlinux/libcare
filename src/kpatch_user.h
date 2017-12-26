@@ -35,7 +35,7 @@ struct kpatch_storage {
 		struct rb_root tree;
 
 		/* A single file, is_patch_dir = 0 */
-		struct kp_file kpfile;
+		struct kpatch_storage_patch patch;
 	};
 };
 

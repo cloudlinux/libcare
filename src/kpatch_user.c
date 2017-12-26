@@ -98,15 +98,16 @@ storage_init(kpatch_storage_t *storage,
 	} else {
 		int ret;
 
-		ret = kpatch_open_fd(storage->patch_fd, &storage->kpfile);
+		ret = kpatch_open_fd(storage->patch_fd, &storage->patch.kpfile);
 		if (ret < 0)
 			goto out_close;
 
-		ret = patch_file_verify(&storage->kpfile);
+		ret = patch_file_verify(&storage->patch.kpfile);
 		if (ret < 0) {
-			kpatch_close_file(&storage->kpfile);
+			kpatch_close_file(&storage->patch.kpfile);
 			goto out_close;
 		}
+		strcpy(storage->patch.buildid, storage->patch.kpfile.patch->uname);
 	}
 
 	storage->path = strdup(fname);
@@ -249,7 +250,12 @@ storage_stat_patch(kpatch_storage_t *storage,
 
 	if (rv == PATCH_FOUND && i == PATCHLEVEL_TEMPLATE_NUM) {
 		rv = readlink_patchlevel(storage->patch_fd, fname);
-		rv = rv >= 0 ? PATCH_FOUND : PATCH_OPEN_ERROR;
+		if (rv < 0) {
+			rv = PATCH_OPEN_ERROR;
+		} else {
+			patch->patchlevel = rv;
+			rv = PATCH_FOUND;
+		}
 	}
 
 	return rv;
@@ -259,55 +265,43 @@ storage_stat_patch(kpatch_storage_t *storage,
  * TODO(pboldin) I duplicate a lot of code kernel has for filesystems already.
  * Should we avoid this caching at all?
  */
-/* PATCH_FOUND -- found, PATCH_OPEN_ERROR -- error,
- * PATCH_NOT_FOUND -- not found */
-static int
-storage_find_patch(kpatch_storage_t *storage, const char *buildid,
-		   struct kp_file **pkpfile)
+#define ERR_PATCH ((struct kpatch_storage_patch *)1)
+static struct kpatch_storage_patch *
+storage_get_patch(kpatch_storage_t *storage, const char *buildid,
+		  int load)
 {
 	struct kpatch_storage_patch *patch = NULL;
 	struct rb_node *node;
 	int rv;
 
 	if (!storage->is_patch_dir) {
-		if (!strcmp(storage->kpfile.patch->uname, buildid)) {
-			if (pkpfile != NULL)
-				*pkpfile = &storage->kpfile;
-			return PATCH_FOUND;
+		if (!strcmp(storage->patch.buildid, buildid)) {
+			return &storage->patch;
 		}
-		return PATCH_NOT_FOUND;
+		return NULL;
 	}
 
 	/* Look here, could be loaded already */
 	node = rb_search_node(&storage->tree, cmp_buildid,
 			      (unsigned long)buildid);
-	if (node != NULL) {
-		struct kpatch_storage_patch *patch;
-		patch = rb_entry(node, struct kpatch_storage_patch, node);
-		if (pkpfile != NULL)
-			*pkpfile = &patch->kpfile;
-		/* Just checking, no need to load the data */
-		return patch->kpfile.size > 0 ? PATCH_FOUND : PATCH_NOT_FOUND;
-	}
+	if (node != NULL)
+		return rb_entry(node, struct kpatch_storage_patch, node);
 
 	/* OK, look at the filesystem */
 	patch = malloc(sizeof(*patch));
 	if (patch == NULL)
-		return -1;
+		return ERR_PATCH;
 
 	memset(patch, 0, sizeof(*patch));
 
-	if (pkpfile != NULL) {
+	if (load)
 		rv = storage_open_patch(storage, buildid, patch);
-		if (rv == PATCH_FOUND)
-			*pkpfile = &patch->kpfile;
-	} else {
+	else
 		rv = storage_stat_patch(storage, buildid, patch);
-	}
 
 	if (rv == PATCH_OPEN_ERROR) {
 		free(patch);
-		return rv;
+		return ERR_PATCH;
 	}
 
 	strcpy(patch->buildid, buildid);
@@ -315,9 +309,46 @@ storage_find_patch(kpatch_storage_t *storage, const char *buildid,
 	rb_insert_node(&storage->tree,
 		       &patch->node,
 		       cmp_buildid,
-		       (unsigned long)buildid);
+		       (unsigned long)patch->buildid);
 
-	return rv;
+	return patch;
+}
+
+static int
+storage_load_patch(kpatch_storage_t *storage, const char *buildid,
+		   struct kp_file **pkpfile)
+{
+	struct kpatch_storage_patch *patch = NULL;
+
+	if (pkpfile == NULL) {
+		kperr("pkpfile == NULL\n");
+		return PATCH_OPEN_ERROR;
+	}
+
+	patch = storage_get_patch(storage, buildid, /* load */ 1);
+	if (patch == ERR_PATCH)
+		return PATCH_OPEN_ERROR;
+	if (patch == NULL)
+		return PATCH_NOT_FOUND;
+
+	*pkpfile = &patch->kpfile;
+
+	return patch->kpfile.size ? PATCH_FOUND : PATCH_NOT_FOUND;
+}
+
+static int
+storage_have_patch(kpatch_storage_t *storage, const char *buildid)
+{
+	struct kpatch_storage_patch *patch = NULL;
+
+	patch = storage_get_patch(storage, buildid, /* load */ 0);
+	if (patch == ERR_PATCH)
+		return PATCH_OPEN_ERROR;
+
+	if (patch == NULL || patch->kpfile.size == 0)
+		return PATCH_NOT_FOUND;
+
+	return PATCH_FOUND;
 }
 
 static int
@@ -334,7 +365,7 @@ storage_lookup_patches(kpatch_storage_t *storage, kpatch_process_t *proc)
 
 		bid = kpatch_get_buildid(o);
 
-		ret = storage_find_patch(storage, bid, &pkpfile);
+		ret = storage_load_patch(storage, bid, &pkpfile);
 		if (ret == PATCH_OPEN_ERROR) {
 			kplogerror("error finding patch for %s (%s)\n",
 				   o->name, bid);
@@ -1363,7 +1394,7 @@ process_info(int pid, void *_data)
 		}
 
 		if (data->storage &&
-		    !storage_find_patch(data->storage, buildid, NULL))
+		    storage_have_patch(data->storage, buildid) <= 0)
 			continue;
 
 		if (!pid_printed) {
