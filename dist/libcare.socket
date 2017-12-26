@@ -1,0 +1,11 @@
+[Unit]
+Description=LibCare patch server
+
+[Socket]
+ListenStream=/run/libcare/libcare.sock
+SocketGroup=libcare
+SocketMode=0660
+Symlinks=/run/libcare.sock
+
+[Install]
+WantedBy=libvirtd.service

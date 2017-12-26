@@ -1897,30 +1897,28 @@ static int usage_server(const char *err)
 
 #define LISTEN_BACKLOG 1
 static int
-cmd_server(int argc, char *argv[])
+server_bind_socket(const char *path)
 {
-	int sfd = -1, cfd, sockaddr_len, rv;
-	const char *unixsocket;
+	int sfd = -1, rv, sockaddr_len;
 	struct sockaddr_un sockaddr;
 
-	if (argc < 2)
-		return usage_server("UNIX socket argument is missing");
-
-	unixsocket = argv[1];
-
-	if (argc >= 3)
-		strcpy(storage_dir, argv[2]);
+	/* Handle invocation by libcare.service */
+	if (path[0] == '&') {
+		if (sscanf(path, "&%d", &sfd) == 0)
+			return -1;
+		return sfd;
+	}
 
 	memset(&sockaddr, 0, sizeof(sockaddr));
 	sockaddr.sun_family = AF_UNIX;
-	sockaddr_len = strlen(unixsocket) + 1;
+	sockaddr_len = strlen(path) + 1;
 	if (sockaddr_len >= sizeof(sockaddr.sun_path)) {
 		kperr("sockaddr is too long\n");
 		return -1;
 	}
 
-	strncpy(sockaddr.sun_path, unixsocket, sizeof(sockaddr.sun_path));
-	if (unixsocket[0] == '\n')
+	strncpy(sockaddr.sun_path, path, sizeof(sockaddr.sun_path));
+	if (path[0] == '@')
 		sockaddr.sun_path[0] = '\0';
 
 	sockaddr_len += sizeof(sockaddr.sun_family);
@@ -1938,6 +1936,31 @@ cmd_server(int argc, char *argv[])
 	if (rv == -1)
 		goto err_close;
 
+	return sfd;
+
+err_close:
+	if (rv < 0)
+		kplogerror("can't listen on unix socket %s\n", path);
+	if (sfd != -1)
+		close(sfd);
+	return rv;
+}
+
+static int
+cmd_server(int argc, char *argv[])
+{
+	int sfd = -1, cfd, rv;
+
+	if (argc < 2)
+		return usage_server("UNIX socket argument is missing");
+
+	sfd = server_bind_socket(argv[1]);
+	if (sfd < 0)
+		return sfd;
+
+	if (argc >= 3)
+		strcpy(storage_dir, argv[2]);
+
 	setlinebuf(stdout);
 
 	while ((cfd = accept4(sfd, NULL, 0, SOCK_CLOEXEC)) >= 0) {
@@ -1950,12 +1973,8 @@ cmd_server(int argc, char *argv[])
 			break;
 	}
 
-err_close:
-	if (rv < 0)
-		kplogerror("can't listen on unix socket %s\n", unixsocket);
-	if (sfd != -1)
-		close(sfd);
-	return rv;
+	close(sfd);
+	return 0;
 }
 
 

@@ -65,6 +65,7 @@ make -C dist/selinux install \
 
 
 install -m 0644 -D dist/libcare.service %{buildroot}%{_unitdir}/libcare.service
+install -m 0644 -D dist/libcare.socket %{buildroot}%{_unitdir}/libcare.socket
 install -m 0644 -D dist/libcare.preset %{buildroot}%{_presetdir}/90-libcare.preset
 
 %pre
@@ -73,12 +74,25 @@ install -m 0644 -D dist/libcare.preset %{buildroot}%{_presetdir}/90-libcare.pres
 
 %post
 %systemd_post libcare.service
+%systemd_post libcare.socket
+
+if [ $1 -eq 1 ]; then
+	# First install
+	systemctl start libcare.socket
+fi
+if [ $1 -eq 2 ]; then
+	# Upgrade. Just stop it, we will be reactivated
+	# by a connect to /run/libcare.sock
+	systemctl stop libcare.service
+fi
 
 %preun
 %systemd_preun libcare.service
+%systemd_preun libcare.socket
 
 %postun
 %systemd_postun libcare.service
+%systemd_postun libcare.socket
 
 %clean
 rm -rf $RPM_BUILD_ROOT
@@ -93,6 +107,7 @@ rm -rf $RPM_BUILD_ROOT
 %{_libexecdir}/libcare/kpatch_strip
 %{_libexecdir}/libcare/kpatch_make
 %{_unitdir}/libcare.service
+%{_unitdir}/libcare.socket
 %{_presetdir}/90-libcare.preset
 
 %if 0%{with selinux}
