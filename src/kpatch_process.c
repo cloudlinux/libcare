@@ -378,14 +378,12 @@ kpatch_process_associate_patches(kpatch_process_t *proc)
 	struct object_file *o, *objpatch;
 	size_t found = 0;
 
-	list_for_each_entry(objpatch,
-			       &proc->objs, list) {
+	list_for_each_entry(objpatch, &proc->objs, list) {
 
 		if (!objpatch->is_patch)
 			continue;
 
-		list_for_each_entry(o,
-				       &proc->objs, list) {
+		list_for_each_entry(o, &proc->objs, list) {
 			const char *bid;
 			struct obj_vm_area *patchvma;
 
@@ -396,8 +394,8 @@ kpatch_process_associate_patches(kpatch_process_t *proc)
 
 			o->applied_patch = objpatch;
 			patchvma = list_first_entry(&objpatch->vma,
-						       struct obj_vm_area,
-						       list);
+						    struct obj_vm_area,
+						    list);
 			o->kpta = patchvma->inmem.start;
 			o->kpfile = objpatch->kpfile;
 
@@ -488,7 +486,8 @@ kpatch_process_parse_proc_maps(kpatch_process_t *proc)
 	fclose(f);
 
 	if (!is_libc_base_set) {
-		kperr("Can't find libc_base required for manipulations\n");
+		kperr("Can't find libc_base required for manipulations: %d\n",
+		      proc->pid);
 		return -1;
 	}
 

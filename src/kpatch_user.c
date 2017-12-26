@@ -1032,7 +1032,7 @@ static int usage_patch(const char *err)
 	fprintf(stderr, "  -s          - process was just executed\n");
 	fprintf(stderr, "  -p <PID>    - target process\n");
 	fprintf(stderr, "  -r fd       - fd used with LD_PRELOAD=execve.so.\n");
-	return -1;
+	return err ? 0 : -1;
 }
 
 int cmd_patch_user(int argc, char *argv[])
@@ -1292,7 +1292,7 @@ static int usage_unpatch(const char *err)
 	fprintf(stderr, "\nOptions:\n");
 	fprintf(stderr, "  -h          - this message\n");
 	fprintf(stderr, "  -p <PID>    - target process\n");
-	return -1;
+	return err ? 0 : -1;
 }
 
 int cmd_unpatch_user(int argc, char *argv[])
@@ -1340,7 +1340,7 @@ int usage_info(const char *err)
 	fprintf(stderr, "  -p <PID>	- target process, 'all' or omitted for all the system processes\n");
 	fprintf(stderr, "  -s <STORAGE>	- only show BuildIDs of object having patches in STORAGE\n");
 	fprintf(stderr, "  -r <REGEXP>	- only show BuildIDs of object having name matching REGEXP\n");
-	return -1;
+	return err ? 0 : -1;
 }
 
 struct info_data {
