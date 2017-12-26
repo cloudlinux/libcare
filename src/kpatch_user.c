@@ -132,6 +132,7 @@ free_storage_patch_cb(struct rb_node *node)
 	patch = rb_entry(node, struct kpatch_storage_patch, node);
 	kpatch_close_file(&patch->kpfile);
 
+	free(patch->desc);
 	free(patch);
 }
 
@@ -366,6 +367,63 @@ storage_have_patch(kpatch_storage_t *storage, const char *buildid,
 	if (ppatch)
 		*ppatch = patch;
 	return PATCH_FOUND;
+}
+
+static char *
+storage_get_description(kpatch_storage_t *storage,
+			struct kpatch_storage_patch *patch)
+{
+	char *desc = NULL;
+	char path[PATH_MAX];
+	int fd, rv, alloc = 0, sz = 0;
+
+	if (!storage->is_patch_dir)
+		return NULL;
+
+	if (patch->desc)
+		return patch->desc;
+
+	sprintf(path, "%s/%d/description", patch->buildid, patch->patchlevel);
+	fd = openat(storage->patch_fd, path, O_RDONLY);
+	if (fd == -1)
+		return NULL;
+
+	while (1) {
+		if (sz + 1024 >= alloc) {
+			char *olddesc = desc;
+			alloc += PAGE_SIZE;
+
+			desc = malloc(alloc);
+
+			if (olddesc != NULL) {
+				memcpy(desc, olddesc, sz);
+				free(olddesc);
+			}
+
+			olddesc = desc;
+		}
+
+		rv = read(fd, desc + sz, alloc - sz);
+		if (rv == -1 && errno == EINTR)
+			continue;
+
+		if (rv == -1)
+			goto err_free;
+
+		if (rv == 0)
+			break;
+
+		sz += rv;
+	}
+
+	patch->desc = desc;
+
+	return desc;
+
+err_free:
+	free(desc);
+	close(fd);
+	return NULL;
 }
 
 static int
@@ -1353,6 +1411,7 @@ int usage_info(const char *err)
 	fprintf(stderr, "usage: libcare-ctl info [options] [-b BUILDID] [-p PID] [-s STORAGE] [-r REGEXP]\n");
 	fprintf(stderr, "\nOptions:\n");
 	fprintf(stderr, "  -h		- this message\n");
+	fprintf(stderr, "  -n		- don't print patch descriptions\n");
 	fprintf(stderr, "  -b <BUILDID>	- output all processes having object with specified BuildID loaded\n");
 	fprintf(stderr, "  -p <PID>	- target process, 'all' or omitted for all the system processes\n");
 	fprintf(stderr, "  -s <STORAGE>	- only show BuildIDs of object having patches in STORAGE, default %s\n",
@@ -1365,7 +1424,22 @@ struct info_data {
 	const char *buildid;
 	kpatch_storage_t *storage;
 	regex_t *name_re;
+	int print_description;
+	int may_update, vulnerable;
 };
+
+const char *RED   	= "\x1B[31m";
+const char *GREEN	= "\x1B[32m";
+const char *YELLOW	= "\x1B[33m";
+const char *RESET	= "\x1B[0m";
+
+static void
+init_colors(void)
+{
+	if (!isatty(fileno(stdout))) {
+		RED = GREEN = YELLOW = RESET = "";
+	}
+}
 
 static int
 object_info(struct info_data *data, struct object_file *o,
@@ -1422,10 +1496,51 @@ object_info(struct info_data *data, struct object_file *o,
 	if (storage_patch_found(patch) && patch->patchlevel) {
 		printf(" latest=%d", patch->patchlevel);
 	}
-	if (patch && (o->applied_patch == NULL || patch->patchlevel > o->kpfile.patch->user_level)) {
-		printf("\nbetter patch available, do `libcare-client /run/libcare.sock update`");
+
+	/* empty patch patchlevel=0 with description of bugs in the version */
+	if (patch && patch->patchlevel == 0 && o->applied_patch == NULL) {
+		printf(" %sVULNERABLE%s\n", RED, RESET);
+
+		if (data->print_description) {
+			char *desc;
+
+			desc = storage_get_description(data->storage, patch);
+			printf("\n%sVULNERABLE VERSION:\n", RED);
+
+			printf("%s%s", desc, RESET);
+		}
+
+		data->vulnerable ++;
 	}
+
 	printf("\n");
+
+	/* Old or no patch applied but we have one in storage */
+	if (patch && patch->patchlevel != 0 &&
+	    (o->applied_patch == NULL || patch->patchlevel > o->kpfile.patch->user_level)) {
+		if (data->print_description) {
+			char *desc;
+
+			printf("\n%snew patch description:\n", YELLOW);
+
+			desc = storage_get_description(data->storage, patch);
+			printf("%s%s", desc, RESET);
+		}
+
+		data->may_update++;
+		return 0;
+	}
+
+	/* patch applied and is latest version. show descripition for it */
+	if (patch && o->applied_patch != NULL && data->print_description) {
+		char *desc;
+
+		printf("\n%slatest patch applied\n", GREEN);
+
+		desc = storage_get_description(data->storage, patch);
+		printf("%s%s", desc, RESET);
+		return 0;
+	}
 
 	return 0;
 }
@@ -1455,6 +1570,8 @@ process_info(int pid, void *_data)
 		if (object_info(data, o, &pid_printed))
 			break;
 
+	if (pid_printed && data->print_description)
+		printf("========================================\n");
 out:
 	kpatch_process_free(proc);
 
@@ -1465,14 +1582,21 @@ static int
 processes_info(int pid,
 	       const char *buildid,
 	       const char *storagepath,
-	       const char *regexp)
+	       const char *regexp,
+	       int print_description)
 {
 	int ret = -1;
 	struct info_data data = { 0, };
 	kpatch_storage_t storage;
 	regex_t regex;
 
+	init_colors();
+
 	data.buildid = buildid;
+	data.print_description = print_description;
+	data.may_update = 0;
+	data.vulnerable = 0;
+
 	if (regexp != NULL) {
 		ret = regcomp(&regex, regexp, REG_EXTENDED);
 		if (ret != 0) {
@@ -1491,6 +1615,17 @@ processes_info(int pid,
 
 	ret = processes_do(pid, process_info, &data);
 
+	if (data.vulnerable) {
+		printf("%s%d object(s) are vulnerable%s\n", RED, data.vulnerable, RESET);
+	}
+
+	if (data.may_update) {
+		printf("%s%d object(s) may be updated to the latest patch%s\n",
+		       YELLOW, data.may_update, RESET);
+		printf("\n%sRun: libcare-client /run/libcare.sock update%s\n",
+		       RED, RESET);
+	}
+
 out_err:
 	if (data.storage != NULL) {
 		storage_free(data.storage);
@@ -1504,12 +1639,12 @@ out_err:
 
 int cmd_info_user(int argc, char *argv[])
 {
-	int opt, pid = -1, verbose = 0;
+	int opt, pid = -1, verbose = 0, print_description = 1;
 	const char *buildid = NULL;
 	const char *storagepath = storage_dir;
 	const char *regexp = NULL;
 
-	while ((opt = getopt(argc, argv, "hb:p:s:r:v")) != EOF) {
+	while ((opt = getopt(argc, argv, "hb:p:s:r:vn")) != EOF) {
 		switch (opt) {
 		case 'b':
 			buildid = optarg;
@@ -1523,6 +1658,9 @@ int cmd_info_user(int argc, char *argv[])
 			if (storagepath[0] == '\0' ||
 			    !strcmp(storagepath, "/dev/null"))
 				storagepath = NULL;
+			break;
+		case 'n':
+			print_description = 0;
 			break;
 		case 'r':
 			regexp = optarg;
@@ -1546,7 +1684,8 @@ int cmd_info_user(int argc, char *argv[])
 	}
 
 
-	return processes_info(pid, buildid, storagepath, regexp);
+	return processes_info(pid, buildid, storagepath, regexp,
+			      print_description);
 }
 
 

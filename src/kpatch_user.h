@@ -15,6 +15,9 @@ struct kpatch_storage_patch {
 	/* Patch level */
 	int patchlevel;
 
+	/* Description cache */
+	char *desc;
+
 	/* Node for rb_root */
 	struct rb_node node;
 };
