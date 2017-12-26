@@ -1350,6 +1350,47 @@ struct info_data {
 };
 
 static int
+object_info(struct info_data *data, struct object_file *o,
+	    int *pid_printed)
+{
+	const char *buildid;
+	kpatch_process_t *proc = o->proc;
+	int pid = proc->pid;
+
+	if (!o->is_elf || is_kernel_object_name(o->name))
+		return 0;
+
+
+	if (data->name_re != NULL &&
+	    regexec(data->name_re, o->name,
+		    0, NULL, REG_EXTENDED) == REG_NOMATCH)
+		return 0;
+
+	buildid = kpatch_get_buildid(o);
+
+	if (data->buildid) {
+		if (!strcmp(data->buildid, buildid)) {
+			printf("pid=%d comm=%s\n", pid, proc->comm);
+			printf("%s %s\n", o->name, buildid);
+			return 1;
+		}
+		return 0;
+	}
+
+	if (data->storage &&
+	    storage_have_patch(data->storage, buildid) <= 0)
+		return 0;
+
+	if (!*pid_printed) {
+		printf("pid=%d comm=%s\n", pid, proc->comm);
+		*pid_printed = 1;
+	}
+	printf("%s buildid=%s\n", o->name, buildid);
+
+	return 0;
+}
+
+static int
 process_info(int pid, void *_data)
 {
 	int ret, pid_printed = 0;
@@ -1370,39 +1411,9 @@ process_info(int pid, void *_data)
 		goto out;
 
 
-	list_for_each_entry(o, &proc->objs, list) {
-		const char *buildid;
-
-		if (!o->is_elf || is_kernel_object_name(o->name))
-			continue;
-
-
-		if (data->name_re != NULL &&
-		    regexec(data->name_re, o->name,
-			    0, NULL, REG_EXTENDED) == REG_NOMATCH)
-			continue;
-
-		buildid = kpatch_get_buildid(o);
-
-		if (data->buildid) {
-			if (!strcmp(data->buildid, buildid)) {
-				printf("pid=%d comm=%s\n", pid, proc->comm);
-				printf("%s %s\n", o->name, buildid);
-				break;
-			}
-			continue;
-		}
-
-		if (data->storage &&
-		    storage_have_patch(data->storage, buildid) <= 0)
-			continue;
-
-		if (!pid_printed) {
-			printf("pid=%d comm=%s\n", pid, proc->comm);
-			pid_printed = 1;
-		}
-		printf("%s %s\n", o->name, buildid);
-	}
+	list_for_each_entry(o, &proc->objs, list)
+		if (object_info(data, o, &pid_printed))
+			break;
 
 out:
 	kpatch_process_free(proc);
