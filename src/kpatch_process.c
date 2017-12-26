@@ -619,11 +619,28 @@ process_has_thread_pid(kpatch_process_t *proc, int pid)
 }
 
 int
+kpatch_process_mem_open(kpatch_process_t *proc)
+{
+	char path[sizeof("/proc/0123456789/mem")];
+
+	snprintf(path, sizeof(path), "/proc/%d/mem", proc->pid);
+	proc->memfd = open(path, O_RDWR);
+	if (proc->memfd < 0) {
+		kplogerror("can't open /proc/%d/mem", proc->pid);
+		return -1;
+	}
+
+	return 0;
+}
+
+int
 kpatch_process_attach(kpatch_process_t *proc)
 {
 	int *pids = NULL, ret;
 	size_t i, npids = 0, alloc = 0, prevnpids = 0, nattempts;
-	char path[sizeof("/proc/0123456789/mem")];
+
+	if (kpatch_process_mem_open(proc) < 0)
+		return -1;
 
 	for (nattempts = 0; nattempts < max_attach_attempts; nattempts++) {
 		ret = process_list_threads(proc, &pids, &npids, &alloc);
@@ -668,13 +685,6 @@ kpatch_process_attach(kpatch_process_t *proc)
 
 	if (nattempts == max_attach_attempts) {
 		kperr("unable to catch up with process, bailing\n");
-		goto detach;
-	}
-
-	snprintf(path, sizeof(path), "/proc/%d/mem", proc->pid);
-	proc->memfd = open(path, O_RDWR);
-	if (proc->memfd < 0) {
-		kplogerror("can't open /proc/%d/mem", proc->pid);
 		goto detach;
 	}
 

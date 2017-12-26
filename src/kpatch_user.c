@@ -1330,7 +1330,7 @@ process_info(int pid, void *_data)
 	if (ret < 0)
 		return -1;
 
-	ret = kpatch_process_attach(proc);
+	ret = kpatch_process_mem_open(proc);
 	if (ret < 0)
 		goto out;
 
