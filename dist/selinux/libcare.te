@@ -7,7 +7,7 @@ require {
 	type var_run_t;
 	type proc_t;
 	type qemu_exec_t;
-
+	attribute domain;
 }
 
 # systemd(init_t) executes /usr/bin/libcare-ctl(libcare_exec_t)
@@ -66,6 +66,8 @@ allow svirt_t libcare_t : unix_stream_socket connectto;
 # to allow patient to send us SIGCHLD (required for ptrace)
 allow svirt_t libcare_t : process sigchld;
 
+# silence all the audits about /proc/pid/exe
+dontaudit libcare_t domain : dir search;
 
 # DEBUG
 ## Run runcon system_u:system_r:libcare_t:s0 /usr/bin/libcare-ctl -v patch -p $(pidof qemu-kvm)  /var/lib/libcare
