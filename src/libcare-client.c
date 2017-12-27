@@ -7,30 +7,41 @@
 
 #define handle_error(errstr) do { perror(errstr); exit(EXIT_FAILURE); } while (0)
 
+#define DEFAULT_SOCKET	"/var/run/libcare.sock"
+
 int main(int argc, char **argv)
 {
 	int sock, rv, buflen, i;
 	struct sockaddr_un sockaddr;
-	char *buffer = NULL, *p;
+	char *buffer = NULL, *p, *sockpath = DEFAULT_SOCKET;
 
-	if (argc < 3) {
-		printf("%s: SOCKET ARG0 [ARG1] [ARG2]\n", argv[0]);
+	if (argc < 2 || (argv[1][0] == '/' && argc < 3)) {
+		printf("%s: [/SOCKET] ARG0 [ARG1] [ARG2]\n", argv[0]);
 		exit(EXIT_FAILURE);
 	}
+
+	argv++;
+	argc--;
 
 	sock = socket(AF_UNIX, SOCK_STREAM, 0);
 	if (sock == -1)
 		handle_error("socket(AF_UNIX)");
 
 	sockaddr.sun_family = AF_UNIX;
-	strncpy(sockaddr.sun_path, argv[1], sizeof(sockaddr.sun_path));
+
+	if (argv[0][0] == '/') {
+		sockpath = argv[0];
+		argv++;
+		argc--;
+	}
+	strncpy(sockaddr.sun_path, sockpath, sizeof(sockaddr.sun_path));
 
 	rv = connect(sock, (const struct sockaddr *)&sockaddr, sizeof(sockaddr));
 	if (rv == -1)
 		handle_error("connect");
 
 	buflen = 0;
-	for (i = 2; i < argc; i++) {
+	for (i = 0; i < argc; i++) {
 		buflen += strlen(argv[i]) + 1;
 	}
 	buflen++;
@@ -38,7 +49,7 @@ int main(int argc, char **argv)
 	p = buffer = malloc(buflen);
 	if (buffer == NULL)
 		handle_error("malloc");
-	for (i = 2; i < argc; i++) {
+	for (i = 0; i < argc; i++) {
 		p = stpcpy(p, argv[i]);
 		p++;
 	}
