@@ -2054,7 +2054,8 @@ processes_do(int pid, callback_t callback, void *data)
 			if (errno == ENOENT)
 				kpdebug("skipping kernel thread %d\n", pid);
 			else
-				kplogerror("can't get exec for %d\n", pid);
+				kpdebug("can't get exec for %d: %s\n", pid,
+					strerror(errno));
 			continue;
 		}
 
