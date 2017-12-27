@@ -12,9 +12,9 @@ Source0: %{name}-%{version}.tar.bz2
 BuildRequires: elfutils-libelf-devel libunwind-devel
 
 %if 0%{with selinux}
-BuildRequires:  checkpolicy
-BuildRequires:  selinux-policy-devel
-BuildRequires:  /usr/share/selinux/devel/policyhelp
+BuildRequires: checkpolicy
+BuildRequires: selinux-policy-devel
+BuildRequires: /usr/share/selinux/devel/policyhelp
 %endif
 
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
@@ -40,6 +40,13 @@ LibCare interoperability with the QEMU run by sVirt.
 %endif
 
 
+%package devel
+Summary: LibCare development package
+Group: System Environment/Development Tools
+%description devel
+LibCare devel files.
+
+
 %prep
 %setup -q
 
@@ -54,13 +61,13 @@ make -C dist/selinux
 %{__rm} -rf %{buildroot}
 
 make -C src install \
-	DESTDIR=%{buildroot} \
-	bindir=%{_bindir} \
-	libexecdir=%{_libexecdir}
+        DESTDIR=%{buildroot} \
+        bindir=%{_bindir} \
+        libexecdir=%{_libexecdir}
 
 %if 0%{with selinux}
 make -C dist/selinux install \
-	DESTDIR=%{buildroot}
+        DESTDIR=%{buildroot}
 %endif
 
 
@@ -77,13 +84,13 @@ install -m 0644 -D dist/libcare.preset %{buildroot}%{_presetdir}/90-libcare.pres
 %systemd_post libcare.socket
 
 if [ $1 -eq 1 ]; then
-	# First install
-	systemctl start libcare.socket
+        # First install
+        systemctl start libcare.socket
 fi
 if [ $1 -eq 2 ]; then
-	# Upgrade. Just stop it, we will be reactivated
-	# by a connect to /run/libcare.sock
-	systemctl stop libcare.service
+        # Upgrade. Just stop it, we will be reactivated
+        # by a connect to /run/libcare.sock
+        systemctl stop libcare.service
 fi
 
 %preun
@@ -101,14 +108,17 @@ rm -rf $RPM_BUILD_ROOT
 %defattr(-,root,root)
 %{_bindir}/libcare-ctl
 %{_bindir}/libcare-client
+%{_unitdir}/libcare.service
+%{_unitdir}/libcare.socket
+%{_presetdir}/90-libcare.preset
+
+%files devel
+%defattr(-,root,root)
 %{_bindir}/libcare-cc
 %{_bindir}/libcare-patch-make
 %{_libexecdir}/libcare/kpatch_gensrc
 %{_libexecdir}/libcare/kpatch_strip
 %{_libexecdir}/libcare/kpatch_make
-%{_unitdir}/libcare.service
-%{_unitdir}/libcare.socket
-%{_presetdir}/90-libcare.preset
 
 %if 0%{with selinux}
 
