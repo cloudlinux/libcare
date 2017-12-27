@@ -1741,10 +1741,26 @@ cmd_execve_startup(int fd, int argc, char *argv[], int is_just_started)
 	return 0;
 }
 
+static void
+kill_and_wait(int pid)
+{
+	int status;
+
+	(void) kill(pid, SIGTERM);
+	(void) waitpid(pid, &status, 0);
+}
+
+static int childpid;
+
 static int
 cmd_run(int argc, char *argv[])
 {
 	int pid;
+
+	if (childpid) {
+		kill_and_wait(childpid);
+		childpid = 0;
+	}
 
 	pid = fork();
 	if (pid == -1) {
@@ -1756,6 +1772,7 @@ cmd_run(int argc, char *argv[])
 		return execl("/bin/sh", "sh", "-c", argv[1], (char *)NULL);
 	}
 
+	childpid = pid;
 	printf("%d\n", pid);
 	return 0;
 }
@@ -1763,7 +1780,7 @@ cmd_run(int argc, char *argv[])
 static int
 cmd_kill(int argc, char *argv[])
 {
-	int status, pid;
+	int pid;
 
 	if (sscanf(argv[1], "%d", &pid) != 1) {
 		kperr("can't parse pid from %s\n", argv[1]);
@@ -1771,8 +1788,7 @@ cmd_kill(int argc, char *argv[])
 	}
 
 	kpdebug("killing %d\n", pid);
-	(void) kill(pid, SIGTERM);
-	(void) waitpid(pid, &status, 0);
+	kill_and_wait(pid);
 
 	return 0;
 }
@@ -1946,13 +1962,33 @@ err_close:
 	return rv;
 }
 
+static void
+kill_child(int signum)
+{
+	/* Hello Bulba my old friend... */
+	(void) signum;
+	if (childpid)
+		kill_and_wait(childpid);
+	exit(0x80 | signum);
+}
+
 static int
 cmd_server(int argc, char *argv[])
 {
 	int sfd = -1, cfd, rv;
+	struct sigaction act;
 
 	if (argc < 2)
 		return usage_server("UNIX socket argument is missing");
+
+	memset(&act, 0, sizeof(act));
+	act.sa_handler = kill_child;
+	act.sa_flags = SA_RESTART;
+	rv = sigaction(SIGTERM, &act, NULL);
+	if (rv < 0) {
+		kplogerror("can't install signal handler\n");
+		return -1;
+	}
 
 	sfd = server_bind_socket(argv[1]);
 	if (sfd < 0)
@@ -1972,6 +2008,9 @@ cmd_server(int argc, char *argv[])
 		if (rv == SERVER_STOP)
 			break;
 	}
+
+	if (childpid)
+		kill_and_wait(childpid);
 
 	close(sfd);
 	return 0;

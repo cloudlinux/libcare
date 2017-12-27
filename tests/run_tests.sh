@@ -564,7 +564,8 @@ main() {
 	trap 'tmpfile=$(mktemp);
 	      jobs -p > $tmpfile;
 	      while IFS= read -r pid; do kill $pid 2>/dev/null || :; done < $tmpfile;
-	      rm -f $tmpfile' 0
+	      rm -f $tmpfile;
+	      exit' EXIT TERM INT
 
 	nskipped=0
 	nfailed=0
