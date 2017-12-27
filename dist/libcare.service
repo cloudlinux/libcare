@@ -4,6 +4,6 @@ Description=LibCare patch server
 [Service]
 
 ExecStart=/usr/bin/libcare-ctl server &3
-ExecStartPost=/usr/bin/libcare-client /run/libcare.sock update
+ExecStartPost=/usr/bin/libcare-client update
 
-ExecStop=/usr/bin/libcare-client /run/libcare.sock stop
+ExecStop=/usr/bin/libcare-client stop

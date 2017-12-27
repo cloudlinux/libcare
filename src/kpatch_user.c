@@ -1622,7 +1622,7 @@ processes_info(int pid,
 	if (data.may_update) {
 		printf("%s%d object(s) may be updated to the latest patch%s\n",
 		       YELLOW, data.may_update, RESET);
-		printf("\n%sRun: libcare-client /run/libcare.sock update%s\n",
+		printf("\n%sRun: libcare-client update%s\n",
 		       RED, RESET);
 	}
 
