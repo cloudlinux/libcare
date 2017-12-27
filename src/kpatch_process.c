@@ -618,12 +618,12 @@ process_has_thread_pid(kpatch_process_t *proc, int pid)
 }
 
 int
-kpatch_process_mem_open(kpatch_process_t *proc)
+kpatch_process_mem_open(kpatch_process_t *proc, int mode)
 {
 	char path[sizeof("/proc/0123456789/mem")];
 
 	snprintf(path, sizeof(path), "/proc/%d/mem", proc->pid);
-	proc->memfd = open(path, O_RDWR);
+	proc->memfd = open(path, mode == MEM_WRITE ? O_RDWR : O_RDONLY);
 	if (proc->memfd < 0) {
 		kplogerror("can't open /proc/%d/mem", proc->pid);
 		return -1;
@@ -638,7 +638,7 @@ kpatch_process_attach(kpatch_process_t *proc)
 	int *pids = NULL, ret;
 	size_t i, npids = 0, alloc = 0, prevnpids = 0, nattempts;
 
-	if (kpatch_process_mem_open(proc) < 0)
+	if (kpatch_process_mem_open(proc, MEM_WRITE) < 0)
 		return -1;
 
 	for (nattempts = 0; nattempts < max_attach_attempts; nattempts++) {

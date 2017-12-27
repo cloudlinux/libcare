@@ -1557,7 +1557,7 @@ process_info(int pid, void *_data)
 	if (ret < 0)
 		return -1;
 
-	ret = kpatch_process_mem_open(proc);
+	ret = kpatch_process_mem_open(proc, MEM_READ);
 	if (ret < 0)
 		goto out;
 
