@@ -1367,6 +1367,10 @@ object_info(struct info_data *data, struct object_file *o,
 		return 0;
 
 	buildid = kpatch_get_buildid(o);
+	if (buildid == NULL) {
+		kperr("can't get buildid for %s\n", o->name);
+		return 0;
+	}
 
 	if (data->buildid) {
 		if (!strcmp(data->buildid, buildid)) {
