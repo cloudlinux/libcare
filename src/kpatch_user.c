@@ -442,8 +442,9 @@ storage_lookup_patches(kpatch_storage_t *storage, kpatch_process_t *proc)
 
 		ret = storage_load_patch(storage, bid, &pkpfile);
 		if (ret == PATCH_OPEN_ERROR) {
-			kplogerror("error finding patch for %s (%s)\n",
-				   o->name, bid);
+			if (errno != ENOENT)
+				kplogerror("error finding patch for %s (%s)\n",
+					   o->name, bid);
 			continue;
 		}
 
