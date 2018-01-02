@@ -1010,7 +1010,7 @@ static int process_patch(int pid, void *_data)
 
 	kpatch_process_print_short(proc);
 
-	ret = kpatch_process_attach(proc);
+	ret = kpatch_process_mem_open(proc, MEM_READ);
 	if (ret < 0)
 		goto out_free;
 
@@ -1030,11 +1030,10 @@ static int process_patch(int pid, void *_data)
 		goto out_free;
 
 	/*
-	 * For each object file that we want to patch (either binary
-	 * itself or shared library) we need its ELF structure
-	 * to perform relocations. Because we know uniq BuildID of
-	 * the object the section addresses stored in the patch
-	 * are valid for the original object.
+	 * For each object file that we want to patch (either binary itself or
+	 * shared library) we need its ELF structure to perform relocations.
+	 * Because we know uniq BuildID of the object the section addresses
+	 * stored in the patch are valid for the original object.
 	 */
 	ret = kpatch_process_map_object_files(proc);
 	if (ret < 0)
@@ -1045,6 +1044,11 @@ static int process_patch(int pid, void *_data)
 	 */
 	ret = storage_lookup_patches(storage, proc);
 	if (ret <= 0)
+		goto out_free;
+
+	/* Finally, attach to process */
+	ret = kpatch_process_attach(proc);
+	if (ret < 0)
 		goto out_free;
 
 	ret = kpatch_coroutines_find(proc);

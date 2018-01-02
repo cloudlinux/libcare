@@ -622,6 +622,10 @@ kpatch_process_mem_open(kpatch_process_t *proc, int mode)
 {
 	char path[sizeof("/proc/0123456789/mem")];
 
+	if (proc->memfd >= 0) {
+		close(proc->memfd);
+	}
+
 	snprintf(path, sizeof(path), "/proc/%d/mem", proc->pid);
 	proc->memfd = open(path, mode == MEM_WRITE ? O_RDWR : O_RDONLY);
 	if (proc->memfd < 0) {
@@ -882,6 +886,12 @@ kpatch_process_load_libraries(kpatch_process_t *proc)
 
 	if (!proc->is_just_started)
 		return 0;
+
+	ret = kpatch_process_attach(proc);
+	if (ret < 0) {
+		kperr("unable to attach to just started process\n");
+		return -1;
+	}
 
 	if (proc->send_fd != -1) {
 		ret = kpatch_process_kickstart_execve_wrapper(proc);
