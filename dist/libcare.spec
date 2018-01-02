@@ -1,7 +1,7 @@
 
 %bcond_without selinux
 
-Version: 0.1.3
+Version: 0.1.4
 Name: libcare
 Summary: LibCare tools
 Release: 1%{?dist}
@@ -161,6 +161,9 @@ exit 0
 %endif
 
 %changelog
+* Tue Jan 02 2018 Pavel Boldin <pboldin@cloudlinux.com> - 0.1.4-1
+- fix libcare service verbosity
+
 * Wed Dec 27 2017 Pavel Boldin <pboldin@cloudlinux.com> - 0.1.3-1
 - use systemd's libcare.socket
 - use libcare-client default's path
