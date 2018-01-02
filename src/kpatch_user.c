@@ -439,6 +439,11 @@ storage_lookup_patches(kpatch_storage_t *storage, kpatch_process_t *proc)
 			continue;
 
 		bid = kpatch_get_buildid(o);
+		if (bid == NULL) {
+			kpinfo("can't get buildid for %s\n",
+			       o->name);
+			continue;
+		}
 
 		ret = storage_load_patch(storage, bid, &pkpfile);
 		if (ret == PATCH_OPEN_ERROR) {
@@ -1467,7 +1472,7 @@ object_info(struct info_data *data, struct object_file *o,
 
 	buildid = kpatch_get_buildid(o);
 	if (buildid == NULL) {
-		kperr("can't get buildid for %s\n", o->name);
+		kpinfo("can't get buildid for %s\n", o->name);
 		return 0;
 	}
 
