@@ -35,7 +35,7 @@ kpatch_make: kpatch_make.o
 LIBUNWIND_LIBS := $(shell pkg-config --libs libunwind libunwind-ptrace)
 
 
-libcare-ctl: kpatch_user.o kpatch_storage.o kpatch_elf.o kpatch_ptrace.o kpatch_coro.o 
+libcare-ctl: kpatch_user.o kpatch_storage.o kpatch_patch.c kpatch_elf.o kpatch_ptrace.o kpatch_coro.o 
 libcare-ctl: kpatch_process.o kpatch_common.o rbtree.o kpatch_log.o
 libcare-ctl: LDLIBS += -lelf -lrt $(LIBUNWIND_LIBS)
 
