@@ -17,6 +17,7 @@ die() {
 usage() {
 	echo "Usage: build [--prebuild] [--help] [--arch ARCH] DIR"
 	echo "    -p|--prebuild     prebuild project for further use"
+	echo "    -t|--test         run unit and stress tests"
 	echo "    -a|--arch ARCH    target architecture(x86_64 by default)"
 	echo "    -h|--help         print this message"
 	echo "    DIR               directory with project's info file and other resources"
@@ -31,6 +32,9 @@ prepare() {
 		case $1 in
 		-p|--prebuild)
 			ACTION=prebuild
+			;;
+		-t|--test)
+			ACTION=test
 			;;
 		-a|--arch)
 			shift
@@ -247,13 +251,17 @@ kp_build_rpm() {
 		-bc						\
 		$KP_RPMBUILD_FLAGS				\
 		'--define "_topdir $KP_PROJECT_BUILD_ROOT"'	\
-		$KP_PROJECT_BUILD_ROOT/SPECS/$KP_PROJECT_SPEC
+		$KP_PROJECT_BUILD_ROOT/SPECS/$KP_PROJECT_SPEC 2>&1 |
+		tee $KP_PROJECT_BUILD_ROOT/build.log
 }
 
-kp_install_generic() {
-	local ROOT_PATCHED="$HOME/root.patched"
+kp_install_files() {
+	local src="$1"
+	local dest="$2"
+	local direction="$3"
+	local files="$4"
 
-	eval set -- $KP_INSTALL_FILES
+	eval set -- $files
 	while test -n "$1"; do
 		local buildpath="$1"
 		local installpath="$2"
@@ -263,12 +271,16 @@ kp_install_generic() {
 			continue
 		fi
 
-		installpath="$ROOT_PATCHED/$installpath"
-
-		mkdir -p "$(dirname "$installpath")"
-
-		/bin/cp -ra $KP_PROJECT_BUILD_DIR/$buildpath $installpath
+		if test $direction = "from_prebuild"; then
+			install -D $src/$buildpath $dest/$installpath
+		else
+			install -D $src/$installpath $dest/$buildpath
+		fi
 	done
+}
+
+kp_check_missing_files() {
+	local builddir="$1"
 
 	local failed=
 	pushd $KP_PROJECT_BUILD_DIR
@@ -293,6 +305,16 @@ kp_install_generic() {
 	if test -n "$failed"; then
 		die "Files $failed patched but are not listed, aborting"
 	fi
+}
+
+kp_install_generic() {
+	local root_patched="$HOME/root.patched"
+
+	kp_install_files $KP_PROJECT_BUILD_DIR \
+		$root_patched \
+		"from_prebuild" \
+		"$KP_INSTALL_FILES"
+	kp_check_missing_files $KP_PROJECT_BUILD_DIR
 }
 
 kp_install_rpm() {
@@ -367,6 +389,33 @@ kp_pack_patch() {
 	popd
 }
 
+kp_unpack_patch() {
+	local tmpdir=$(mktemp -d --tmpdir)
+
+	echo "  unpacking patches for $KP_PROJECT into $KP_PROJECT_BUILD_ROOT/storage"
+
+	tar -xf /kcdata/$KP_PROJECT_PATCH -C $tmpdir
+
+	find $tmpdir -name \*.kpatch > $tmpdir/patchlist
+
+	while read patchfile; do
+		local patchname=${patchfile##*/}
+		local buildid=${patchname%.kpatch}
+
+		local KP_STORAGE=$KP_PROJECT_BUILD_ROOT/storage/$buildid
+
+		mkdir -p $KP_STORAGE/1
+		cp $patchfile $KP_STORAGE/1/kpatch.bin
+		ln -rs $KP_STORAGE/1 $KP_STORAGE/latest
+	done < $tmpdir/patchlist
+
+	rm -fr $tmpdir
+}
+
+kp_mark_tests_fail() {
+	touch /kcdata/Tests-FAIL
+}
+
 overwrite_utils() {
 	TMPBIN=$(mktemp -d --tmpdir)
 
@@ -394,7 +443,8 @@ overwrite_utils() {
 }
 
 kp_patch_test() {
-	:
+	echo "Empty kp_patch_test called, override it!"
+	exit 1
 }
 
 main() {
@@ -408,20 +458,25 @@ main() {
 
 	kp_prepare_env_hook
 
-	if [ "$ACTION" == "prebuild" ]; then
+	if test "$ACTION" == "prebuild"; then
 		kp_prepare_source
 		kp_prebuild_hook
 		kp_prebuild
 		kp_pack_prebuilt
-	else
+	elif test "$ACTION" == "build"; then
 		kp_unpack_prebuilt
 		kp_patch_source
 		kp_build_hook
 		kp_build
 		kp_sanity_check
 		kp_gen_kpatch
-		kp_patch_test
 		kp_pack_patch
+	elif test "$ACTION" == "test"; then
+		kp_unpack_prebuilt
+		kp_prepare_test_binaries
+		kp_unpack_patch
+		#kp_patch_source
+		kp_patch_test
 	fi
 
 	#clean_dirs

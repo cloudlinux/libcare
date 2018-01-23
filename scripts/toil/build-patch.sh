@@ -15,4 +15,3 @@ make -C $KPATCH_PATH clean all
 make -C /data/execve clean all
 
 /kcdata/scripts/pkgbuild $@ /kcdata/package
-ls /kcdata -lR
