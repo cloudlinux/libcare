@@ -63,19 +63,36 @@ static int usage_patch(const char *err)
 {
 	if (err)
 		fprintf(stderr, "err: %s\n", err);
-	fprintf(stderr, "usage: libcare-ctl patch [options] <-p PID> <-r fd> <patch>\n");
+	fprintf(stderr, "usage: libcare-ctl patch [options] <-p PID> <patch>\n");
 	fprintf(stderr, "\nOptions:\n");
 	fprintf(stderr, "  -h          - this message\n");
-	fprintf(stderr, "  -s          - process was just executed\n");
 	fprintf(stderr, "  -p <PID>    - target process\n");
-	fprintf(stderr, "  -r fd       - fd used with LD_PRELOAD=execve.so.\n");
 	return err ? 0 : -1;
 }
 
+static int
+patch_user(const char *storage_path, int pid,
+	   int is_just_started, int send_fd)
+{
+	int ret;
+	kpatch_storage_t storage;
+
+	ret = storage_init(&storage, storage_path);
+	if (ret < 0)
+		return ret;
+
+	ret = processes_patch(&storage, pid, is_just_started, send_fd);
+
+	storage_free(&storage);
+
+	return ret;
+}
+
+
 int cmd_patch_user(int argc, char *argv[])
 {
-	kpatch_storage_t storage;
-	int opt, pid = -1, is_pid_set = 0, ret, start = 0, send_fd = -1;
+	int opt, pid = -1, is_pid_set = 0, ret;
+	const char *storage_path;
 
 	if (argc < 4)
 		return usage_patch(NULL);
@@ -88,12 +105,6 @@ int cmd_patch_user(int argc, char *argv[])
 			if (strcmp(optarg, "all"))
 				pid = atoi(optarg);
 			is_pid_set = 1;
-			break;
-		case 'r':
-			send_fd = atoi(optarg);
-			break;
-		case 's':
-			start = 1;
 			break;
 		default:
 			return usage_patch("unknown option");
@@ -109,14 +120,9 @@ int cmd_patch_user(int argc, char *argv[])
 	if (!kpatch_check_system())
 		goto out_err;
 
-	ret = storage_init(&storage, argv[argc - 1]);
-	if (ret < 0)
-		goto out_err;
-
-
-	ret = processes_patch(&storage, pid, start, send_fd);
-
-	storage_free(&storage);
+	storage_path = argv[argc - 1];
+	ret = patch_user(storage_path, pid,
+			 /* is_just_started */ 0, /* send_fd */ -1);
 
 out_err:
 	return ret;
@@ -474,24 +480,6 @@ static int
 cmd_execve_startup(int fd, int argc, char *argv[], int is_just_started)
 {
 	int rv, pid;
-	char pid_str[64], send_fd_str[64];
-	char *patch_pid_argv_execve[] = {
-		"patch",
-		"-s",
-		"-p",
-		pid_str,
-		"-r",
-		send_fd_str,
-		storage_dir
-	};
-	char *patch_pid_argv_startup[] = {
-		"patch",
-		"-p",
-		pid_str,
-		"-r",
-		send_fd_str,
-		storage_dir
-	};
 
 	rv = sscanf(argv[1], "%d", &pid);
 	if (rv != 1) {
@@ -499,16 +487,8 @@ cmd_execve_startup(int fd, int argc, char *argv[], int is_just_started)
 		return -1;
 	}
 
-	sprintf(pid_str, "%d", pid);
-	sprintf(send_fd_str, "%d", fd);
-
 	optind = 1;
-	if (is_just_started)
-		rv = cmd_patch_user(ARRAY_SIZE(patch_pid_argv_execve),
-				    patch_pid_argv_execve);
-	else
-		rv = cmd_patch_user(ARRAY_SIZE(patch_pid_argv_startup),
-				    patch_pid_argv_startup);
+	rv = patch_user(storage_dir, pid, is_just_started, fd);
 
 	if (rv < 0)
 		kperr("can't patch pid %d\n", pid);
@@ -578,15 +558,9 @@ cmd_storage(int argc, char *argv[])
 static int
 cmd_update(int argc, char *argv[])
 {
-	char *patch_all[] = {
-		"patch",
-		"-p",
-		"all",
-		storage_dir
-	};
-
-	optind = 1;
-	return cmd_patch_user(ARRAY_SIZE(patch_all), patch_all);
+	return patch_user(storage_dir, /* pid */ -1,
+			  /* is_just_started */ 0,
+			  /* send_fd */ -1);
 }
 
 static int
