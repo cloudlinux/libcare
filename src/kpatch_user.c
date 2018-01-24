@@ -6,6 +6,7 @@
 #include <string.h>
 #include <dirent.h>
 #include <regex.h>
+#include <time.h>
 #include <sys/fcntl.h>
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -563,6 +564,88 @@ cmd_update(int argc, char *argv[])
 			  /* send_fd */ -1);
 }
 
+#ifdef STRESS_TEST
+
+struct test_data {
+	int option_period;
+	int stat_cycle_num;
+} test_info = { .option_period = 0, .stat_cycle_num = 0 };
+
+static int
+server_wait(int pid, int period)
+{
+	struct timespec req, rem;
+	int i;
+	req.tv_sec = 0;
+	req.tv_nsec = 1000*1000;
+	for (i=0; i<period; i++) {
+		nanosleep(&req, &rem);
+		if (kill(pid, 0) != 0) {
+			fprintf(stderr, "Process %d terminated.\n", pid);
+			return -1;
+		}
+	}
+	return 0;
+}
+
+static int
+server_stress_test(int fd, int argc, char *argv[])
+{
+	int pid;
+	int delay;
+	test_info.stat_cycle_num = 0;
+	srand(time(NULL));
+
+	if (sscanf(argv[1], "%d", &pid) != 1) {
+		kperr("Can't parse pid from %s\n", argv[1]);
+		return -1;
+	}
+
+	while (1) {
+		while (patch_user(storage_dir, pid, 0, fd) < 0)
+			if (server_wait(pid, 1) < 0)
+				return 0;
+		if (fd > 0)
+			close(fd);
+		fd = -1;
+		if (test_info.option_period == 0)
+			return 0;
+		delay = rand() % test_info.option_period;
+		if (server_wait(pid, delay) < 0)
+			return 0;
+
+		while (processes_unpatch(pid, 0, 0) < 0)
+			if (server_wait(pid, 1) < 0)
+				return 0;
+		test_info.stat_cycle_num++;
+
+		delay = rand() % test_info.option_period;
+		if (server_wait(pid, delay) < 0)
+			return 0;
+	}
+
+	return 0;
+}
+
+static int cmd_stress_test(int fd, int argc, char *argv[])
+{
+	int child = fork();
+	if (child == 0) {
+		int rv = server_stress_test(fd, argc, argv);
+		exit(rv);
+	}
+	close(fd);
+	return 0;
+}
+
+static int usage_stresstest()
+{
+	fprintf(stderr, "usage: libcare-stresstest PERIOD(ms, 0 - only patch) <UNIX socket> [STORAGE ROOT]\n");
+	return -1;
+}
+
+#endif
+
 static int
 server_execute_cmd(int fd, int argc, char *argv[])
 {
@@ -572,8 +655,13 @@ server_execute_cmd(int fd, int argc, char *argv[])
 
 	if (!strcmp(cmd, "execve"))
 		return cmd_execve_startup(fd, argc, argv, 1);
-	if (!strcmp(cmd, "startup"))
+	if (!strcmp(cmd, "startup")) {
+#ifdef STRESS_TEST
+		return cmd_stress_test(fd, argc, argv);
+#else
 		return cmd_execve_startup(fd, argc, argv, 0);
+#endif
+	}
 	if (!strcmp(cmd, "update"))
 		return cmd_update(argc, argv);
 	if (!strcmp(cmd, "storage"))
@@ -739,6 +827,12 @@ cmd_server(int argc, char *argv[])
 		return -1;
 	}
 
+#ifdef STRESS_TEST
+	if (sscanf(argv[0], "%d", &test_info.option_period) != 1) {
+		kplogerror("Can't parse period from %s\n", argv[0]);
+	}
+#endif
+
 	sfd = server_bind_socket(argv[1]);
 	if (sfd < 0)
 		return sfd;
@@ -824,6 +918,9 @@ static int usage(const char *err)
 {
 	if (err)
 		fprintf(stderr, "err: %s\n", err);
+#ifdef STRESS_TEST
+	return usage_stresstest();
+#endif
 	fprintf(stderr, "usage: libcare-ctl [options] <cmd> [args]\n");
 	fprintf(stderr, "\nOptions:\n");
 	fprintf(stderr, "  -v          - verbose mode\n");
@@ -872,6 +969,12 @@ int main(int argc, char *argv[])
 	argc -= optind;
 	argv += optind;
 
+#ifdef STRESS_TEST
+	if (argc < 3)
+		return usage("not enough arguments.");
+	signal(SIGCHLD, SIG_IGN);
+	return cmd_server(argc, argv);
+#else
 	if (argc < 1)
 		return usage("not enough arguments.");
 
@@ -879,4 +982,5 @@ int main(int argc, char *argv[])
 		return cmd_server(argc, argv);
 	else
 		return execute_cmd(argc, argv);
+#endif
 }
