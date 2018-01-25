@@ -622,7 +622,8 @@ void kpatch_coroutines_free(struct kpatch_process *proc)
 	if (proc->coro.unwd)
 		unw_destroy_addr_space(proc->coro.unwd);
 
-	list_for_each_entry_safe(c, tmp, &proc->coro.coros, list) {
-		kpatch_coro_free(c);
-	}
+	if (!list_empty(&proc->coro.coros))
+		list_for_each_entry_safe(c, tmp, &proc->coro.coros, list) {
+			kpatch_coro_free(c);
+		}
 }

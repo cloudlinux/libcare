@@ -1121,9 +1121,9 @@ kpatch_process_init(kpatch_process_t *proc,
 	list_init(&proc->vmaholes);
 	proc->num_objs = 0;
 
-	if (process_get_comm(proc))
-		goto out_unlock;
 	if (kpatch_coroutines_init(proc))
+		goto out_unlock;
+	if (process_get_comm(proc))
 		goto out_unlock;
 
 	return 0;
