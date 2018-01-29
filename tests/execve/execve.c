@@ -81,7 +81,7 @@ notify_listener(void)
 	sock = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
 	if (sock == -1) {
 		dprintf("socket() error: %s(%d)\n", strerror(errno), errno);
-		return;
+		abort();
 	}
 	dprintf("socket()\n");
 
@@ -96,7 +96,7 @@ notify_listener(void)
 	if (rv == -1) {
 		fprintf(stderr, "libcare-execve: connect() error: %s(%d)\n", strerror(errno), errno);
 		(void) close(sock);
-		return;
+		abort();
 	}
 	dprintf("connect()\n");
 
@@ -113,7 +113,7 @@ notify_listener(void)
 	if (rv == -1) {
 		fprintf(stderr, "send() error: %s(%d)\n", strerror(errno), errno);
 		(void) close(sock);
-		return;
+		abort();
 	}
 	dprintf("send()\n");
 
@@ -123,6 +123,7 @@ notify_listener(void)
 
 	if (rv == -1) {
 		fprintf(stderr, "recv() error: %s(%d)\n", strerror(errno), errno);
+		abort();
 	}
 	dprintf("recv()\n");
 
