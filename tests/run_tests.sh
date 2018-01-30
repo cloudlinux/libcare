@@ -3,7 +3,23 @@
 set -e
 
 wait_file() {
-	while ! test -s $1; do sleep ${2-1}; done
+	local file="$1"
+	local pause="${2-1}"
+	local i=0
+	local timeout=60
+
+	while test $i -lt $timeout; do
+		if test -s $file; then
+			break
+		fi
+		sleep $pause
+		i=$((i + 1))
+	done
+
+	if test $i -eq $timeout; then
+		return 1
+	fi
+
 	return 0
 }
 
