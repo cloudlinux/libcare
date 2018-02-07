@@ -143,55 +143,41 @@ int kpatch_process_mem_iter_peek_ulong(struct process_mem_iter *iter,
 	return kpatch_process_mem_iter_peek(iter, dst, sizeof(*dst), remote_addr);
 }
 
-/* FIXME(pboldin): read these from /proc/pid/auxv */
 int kpatch_ptrace_get_entry_point(struct kpatch_ptrace_ctx *pctx,
 				  unsigned long *pentry_point)
 {
-	int ret;
-	unsigned long *rstack, val;
-	struct user_regs_struct regs;
-	struct process_mem_iter *iter;
+	int fd, ret;
+	unsigned long entry[2] = { AT_NULL, 0 };
+	char path[sizeof("/proc/0123456789/auxv")];
 
 	kpdebug("Looking for entry point...");
 
-	ret = ptrace(PTRACE_GETREGS, pctx->pid, NULL, &regs);
-	if (ret < 0) {
-		kplogerror("can't get regs\n");
+	sprintf(path, "/proc/%d/auxv", pctx->pid);
+	fd = open(path, O_RDONLY);
+	if (fd == -1) {
+		kplogerror("can't open %s\n", path);
 		return -1;
 	}
 
-	iter = kpatch_process_mem_iter_init(pctx->proc);
-	if (!iter) {
-		kplogerror("can't allocate iterator\n");
-		return -1;
-	}
+	do {
+		ret = read(fd, entry, sizeof(entry));
+		if (ret < 0 && errno == EINTR)
+			continue;
+		if (ret != sizeof(entry))
+			break;
 
-	/* Read stack and look for AUX data */
-	rstack = (unsigned long*)regs.rsp;
-
-	/* rstack now points to envs */
-	rstack += PEEK_ULONG(rstack) + 2;
-
-	/* Skip envs */
-	for (; PEEK_ULONG(rstack); rstack++)
-		continue;
-
-	/* Now got to AUX */
-	for (rstack++; (val = PEEK_ULONG(rstack)) != AT_NULL; rstack += 2) {
-		if (val == AT_ENTRY) {
-			*pentry_point = PEEK_ULONG(rstack + 1);
+		if (entry[0] == AT_ENTRY) {
+			*pentry_point = entry[1];
 			break;
 		}
-	}
+	} while (1);
 
-	if (val != AT_ENTRY)
-		kpdebug("FAIL\n");
-	else
-		kpdebug("OK\n");
+	if (ret < 0)
+		kplogerror("reading %s\n", path);
 
-	kpatch_process_mem_iter_free(iter);
+	close(fd);
 
-	return val == AT_ENTRY ? 0 : -1;
+	return entry[0] == AT_ENTRY ? 0 : -1;
 }
 
 #define BREAK_INSN_LENGTH	1
