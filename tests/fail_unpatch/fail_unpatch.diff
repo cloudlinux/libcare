@@ -1,0 +1,11 @@
+--- ./fail_unpatch.c	2018-02-07 18:39:27.145493215 +0200
++++ ./fail_unpatch.c	2018-02-07 18:39:43.349482218 +0200
+@@ -11,7 +11,7 @@
+ 
+ void print_greetings(void)
+ {
+-	printf("Hello. This is an UNPATCHED version!\n");
++	print_greetings_patched();
+ }
+ 
+ void do_work() {
