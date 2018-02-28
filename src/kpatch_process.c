@@ -12,6 +12,11 @@
 #include <sys/stat.h>
 #include <sys/sysmacros.h>
 
+#include <sys/syscall.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <sys/ptrace.h>
+
 #include <gelf.h>
 #include <libunwind.h>
 #include <libunwind-ptrace.h>
@@ -537,6 +542,8 @@ static void
 process_detach(kpatch_process_t *proc)
 {
 	struct kpatch_ptrace_ctx *p, *ptmp;
+	int status;
+	pid_t pid;
 
 	if (proc->memfd >= 0 && close(proc->memfd) < 0)
 		kplogerror("can't close memfd");
@@ -546,9 +553,14 @@ process_detach(kpatch_process_t *proc)
 		unw_destroy_addr_space(proc->ptrace.unwd);
 
 	list_for_each_entry_safe(p, ptmp, &proc->ptrace.pctxs, list) {
-		kpatch_ptrace_detach(p);
+		if (kpatch_ptrace_detach(p) == -ESRCH) {
+			do {
+				pid = waitpid(p->pid, &status, __WALL);
+			} while (pid > 0 && !WIFEXITED(status));
+		}
 		kpatch_ptrace_ctx_destroy(p);
 	}
+	kpinfo("Finished ptrace detaching.");
 }
 
 static int

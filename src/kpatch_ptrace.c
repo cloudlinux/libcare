@@ -1186,7 +1186,7 @@ int kpatch_ptrace_detach(struct kpatch_ptrace_ctx *pctx)
 	ret = ptrace(PTRACE_DETACH, pctx->pid, NULL, NULL);
 	if (ret < 0) {
 		kplogerror("can't detach from %d\n", pctx->pid);
-		return -1;
+		return -errno;
 	}
 
 	kpdebug("OK\n");
