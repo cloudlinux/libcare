@@ -5,6 +5,9 @@
 
 #include "list.h"
 
+#define for_each_thread(proc, pctx)	\
+	list_for_each_entry(pctx, &proc->ptrace.pctxs, list)
+
 struct kpatch_ptrace_ctx {
 	int pid;
 	int running;

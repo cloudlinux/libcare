@@ -31,6 +31,8 @@
 #include "list.h"
 #include "kpatch_log.h"
 
+/* TODO(pboldin): further split this into process/main process/objects */
+
 /*
  * Locks process by opening /proc/<pid>/maps
  * This ensures that task_struct will not be
@@ -934,6 +936,48 @@ kpatch_process_load_libraries(kpatch_process_t *proc)
 	}
 
 	return 1;
+}
+
+int
+kpatch_process_execute_until_stop(kpatch_process_t *proc)
+{
+	int ret, pid, status = 0;
+	struct kpatch_ptrace_ctx *pctx;
+
+	for_each_thread(proc, pctx) {
+		ret = ptrace(PTRACE_CONT, pctx->pid, NULL, NULL);
+		if (ret < 0) {
+			kplogerror("can't start tracee %d\n", pctx->pid);
+			return -1;
+		}
+	}
+
+	while (1) {
+		pid = waitpid(-1, &status, __WALL);
+		if (pid < 0) {
+			kplogerror("can't wait any tracee\n");
+			return -1;
+		}
+
+		if (WIFSTOPPED(status))  {
+			if (WSTOPSIG(status) == SIGSTOP ||
+			    WSTOPSIG(status) == SIGTRAP)
+				return pid;
+			status = WSTOPSIG(status);
+			continue;
+		}
+
+		status = WIFSIGNALED(status) ? WTERMSIG(status) : 0;
+
+		ret = ptrace(PTRACE_CONT, pid, NULL,
+			     (void *)(uintptr_t)status);
+		if (ret < 0) {
+			kplogerror("can't start tracee %d\n", pid);
+			return -1;
+		}
+	}
+
+	return 0;
 }
 
 static int

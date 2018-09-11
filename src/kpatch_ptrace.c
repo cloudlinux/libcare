@@ -186,9 +186,6 @@ int kpatch_ptrace_get_entry_point(struct kpatch_ptrace_ctx *pctx,
 #define SEC_TO_MSEC	1000
 #define MSEC_TO_NSEC	1000000
 
-#define for_each_thread(proc, pctx)	\
-	list_for_each_entry(pctx, &proc->ptrace.pctxs, list)
-
 static struct kpatch_ptrace_ctx *
 kpatch_ptrace_find_thread(kpatch_process_t *proc,
 			  pid_t pid,
