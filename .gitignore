@@ -1,1 +1,10 @@
 *.o
+*.d
+src/kpatch_gensrc
+src/kpatch_make
+src/kpatch_strip
+src/libcare-cc
+src/libcare-client
+src/libcare-ctl
+src/libcare-stresstest
+tags
