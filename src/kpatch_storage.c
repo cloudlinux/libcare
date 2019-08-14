@@ -377,8 +377,10 @@ char *storage_get_description(kpatch_storage_t *storage,
 		if (rv == -1)
 			goto err_free;
 
-		if (rv == 0)
+		if (rv == 0) {
+			desc[sz] = '\0';
 			break;
+		}
 
 		sz += rv;
 	}
