@@ -32,6 +32,17 @@ Now, from inside the container let's install vulnerable version of glibc:
                 glibc-headers-2.17-55.el7 glibc-common-2.17-55.el7
         ...
 
+Also we have to downgrade elfutils since newer versions of ``eu-unstrip``
+fail to work with glibc utilities:
+
+.. code:: console
+
+        [root@... /]# yum downgrade -y --enablerepo=C7.0.1406-base \
+                elfutils-devel-0.158-3.el7.x86_64 elfutils-0.158-3.el7.x86_64 \
+                elfutils-libs-0.158-3.el7.x86_64 elfutils-libelf-0.158-3.el7.x86_64 \
+                elfutils-libelf-devel-0.158-3.el7.x86_64
+        ...
+
 Build the ``libcare`` tools:
 
 .. code:: console

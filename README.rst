@@ -1,6 +1,9 @@
 LibCare -- Patch Userspace Code on Live Processes
 =================================================
 
+.. image:: https://travis-ci.org/cloudlinux/libcare.svg?branch=master
+    :target: https://travis-ci.org/cloudlinux/libcare
+
 Welcome to LibCare --- Live Patch Updates for Userspace Processes and Libraries.
 
 LibCare delivers live patches to any of your Linux executables or libraries at
